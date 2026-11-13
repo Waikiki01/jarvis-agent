@@ -1,0 +1,26 @@
+[project]
+name = "jarvis-agent"
+version = "0.1.0"
+description = "Personal Jarvis: LangGraph multi-agent assistant with RAG (pgvector) and MCP"
+requires-python = ">=3.11"
+dependencies = [
+  "langgraph>=1.2", "langchain-core>=1.8", "langchain-anthropic>=1.7", "langchain-ollama>=1.1",
+  "langgraph-checkpoint-postgres>=3.2", "psycopg[binary,pool]>=3.3",
+  "fastapi>=0.160", "uvicorn[standard]", "pydantic-settings>=2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-asyncio", "httpx"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+pythonpath = ["src"]
+testpaths = ["tests"]
