@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     # Postgres (with pgvector). Empty = memory in RAM only and no knowledge base.
     database_url: str = ""
 
+    # MCP servers to connect (JSON file, relative to the repo root). Empty = none.
+    mcp_config: str = "mcp_servers.json"
+
     # RAG
     embed_model: str = "nomic-embed-text"
     embed_dim: int = 768
@@ -36,7 +39,11 @@ class Settings(BaseSettings):
         "facts (dates, numbers, names) and cite them like [1]. Do not add details that "
         "are not in the passages. If no passages are provided or they don't contain the "
         "answer, you may call search_knowledge with different words; if that also finds "
-        "nothing, say you couldn't find it in the knowledge base. Never guess."
+        "nothing, say you couldn't find it in the knowledge base. Never guess. "
+        "Use the task tools for the user's to-do list, the file tools for files in their "
+        "sandbox folder, and fetch for web pages they give you. If a tool returns an error, "
+        "tell the user exactly that it failed; never claim an action happened unless a "
+        "tool result confirms it."
     )
 
 

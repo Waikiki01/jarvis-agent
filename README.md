@@ -26,7 +26,7 @@ Langfuse tracing · eval suite (golden set + RAGAS) · Docker Compose · CI
 |---|---|---|
 | 1 | FastAPI + LangGraph agent, tools, streaming, memory, Claude/Ollama switch | ✅ |
 | 2 | RAG: ingestion, chunking, hybrid search, reranking, citations | ✅ |
-| 3 | MCP: own server + client for external servers | ⏳ |
+| 3 | MCP: own server + client for external servers | ✅ |
 | 4 | Multi-agent supervisor + human-in-the-loop approval | ⏳ |
 | 5 | Evals (golden set, RAGAS) + Langfuse tracing + CI gate | ⏳ |
 | 6 | Orb/voice UI, demo video | ⏳ |
@@ -75,6 +75,37 @@ What made the difference (measured on the sample docs):
 | Keyword search ANDed all words ("time" not in text → no match) | OR the words, rank by `ts_rank_cd` | Keyword side matches again |
 | Whole note in one 600-char chunk → reranker score 0.009 | Section-aware chunks with heading path `[Doc > Section]` | Same question scored 0.374 |
 | Irrelevant passages invite made-up answers | Cross-encoder score cut-off | "What is my wife's birthday?" → "couldn't find it" |
+
+## MCP (Model Context Protocol)
+
+Jarvis is an **MCP client**, and the repo ships its own **MCP server**.
+
+| Server | Source | Tools given to Jarvis |
+|---|---|---|
+| `tasks` | **this repo** (`jarvis.mcp_server.tasks`, Postgres) | `add_task`, `list_tasks`, `complete_task` + resource `tasks://open` + prompt `plan_my_day` |
+| `filesystem` | `@modelcontextprotocol/server-filesystem` (pinned) | `read_text_file`, `list_directory`, `search_files`, **only inside `sandbox/`** |
+| `fetch` | `mcp-server-fetch` | `fetch` (read a web page) |
+
+Configured in [`mcp_servers.json`](mcp_servers.json). The client (`jarvis/mcp_client.py`):
+- starts each server **once** and keeps the session open (not one process per tool call)
+- gives the model only **allow-listed** tools (write/move/delete file tools are left out)
+- **isolates failures**: a server that won't start is logged and skipped
+- refuses **tool-name clashes** instead of silently replacing a tool
+- `GET /health` lists the tools that actually loaded
+
+Use the tasks server from any MCP client, e.g. Claude Desktop on Windows with the server in WSL
+(`claude_desktop_config.json`):
+
+```json
+{"mcpServers": {"jarvis-tasks": {
+  "command": "wsl",
+  "args": ["-d", "Ubuntu-24.04", "--", "env", "-u", "PYTHONPATH",
+           "JARVIS_DATABASE_URL=postgresql://jarvis:jarvis@localhost:5433/jarvis",
+           "/home/<you>/work/jarvis-agent/.venv/bin/python", "-m", "jarvis.mcp_server.tasks"]
+}}}
+```
+
+Or over HTTP: `python -m jarvis.mcp_server.tasks --http` → `http://127.0.0.1:8765/mcp`.
 
 ## Tests
 

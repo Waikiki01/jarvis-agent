@@ -1,0 +1,21 @@
+{
+  "tasks": {
+    "transport": "stdio",
+    "command": "{python}",
+    "args": ["-m", "jarvis.mcp_server.tasks"],
+    "env": {"JARVIS_DATABASE_URL": "{database_url}"},
+    "allow_tools": ["add_task", "list_tasks", "complete_task"]
+  },
+  "filesystem": {
+    "transport": "stdio",
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem@2.1.0", "{root}/sandbox"],
+    "allow_tools": ["read_text_file", "list_directory", "search_files"]
+  },
+  "fetch": {
+    "transport": "stdio",
+    "command": "{python}",
+    "args": ["-m", "mcp_server_fetch"],
+    "allow_tools": ["fetch"]
+  }
+}

@@ -56,9 +56,16 @@ def create_app(model=None) -> FastAPI:
                 VectorStore(settings.database_url, settings.embed_dim).ensure_schema()
             else:
                 saver = InMemorySaver()
+            tools = get_tools(settings)
+            if settings.mcp_config:
+                from .mcp_client import open_mcp_tools
+
+                tools += await open_mcp_tools(stack, settings.mcp_config, {t.name for t in tools},
+                                              env={"database_url": settings.database_url})
+            app.state.tools = [t.name for t in tools]
             app.state.graph = build_graph(
                 model or get_chat_model(settings), saver, settings.system_prompt,
-                tools=get_tools(settings),
+                tools=tools,
                 retriever=_retriever() if settings.database_url else None)
             app.state.memory = "postgres" if settings.database_url else "in-memory"
             yield
@@ -67,7 +74,8 @@ def create_app(model=None) -> FastAPI:
 
     @app.get("/health")
     async def health():
-        return {"ok": True, "provider": settings.llm_provider, "memory": app.state.memory}
+        return {"ok": True, "provider": settings.llm_provider, "memory": app.state.memory,
+                "tools": app.state.tools}
 
     @app.get("/search")
     def search(q: str):
