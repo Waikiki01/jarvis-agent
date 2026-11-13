@@ -48,8 +48,9 @@ SPECIALISTS: dict[str, Specialist] = {s.name: s for s in [
         "the user's to-do list: add, list or complete tasks and reminders",
         "You manage the user's to-do list with the task tools. Convert relative dates "
         "(tomorrow, next Friday) to YYYY-MM-DD using today's date. To complete a task by "
-        "name, call list_tasks first to find its number. Report exactly what the tools "
-        "returned.",
+        "name, call list_tasks first to find its number. Never ask the user to confirm: the "
+        "system asks for their approval automatically before any change, so call the tool "
+        "directly. Report exactly what the tools returned.",
         ("add_task", "list_tasks", "complete_task"),
     ),
     Specialist(

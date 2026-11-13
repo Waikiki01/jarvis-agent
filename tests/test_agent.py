@@ -218,8 +218,8 @@ def test_api_rest_approval_and_websocket(monkeypatch):
     model = fake(AIMessage("pong"),
                  call("add_task", {"title": "milk"}), AIMessage("Added milk."),
                  AIMessage("streamed reply"))
-    import jarvis.api as api
-    monkeypatch.setattr(api, "get_tools", lambda s: ALL_TOOLS)
+    import jarvis.runtime as runtime
+    monkeypatch.setattr(runtime, "get_tools", lambda s: ALL_TOOLS)
     app = create_app(model=model, router=fixed_router("tasks"))
     with TestClient(app) as client:
         assert client.get("/health").json()["ok"] is True
@@ -263,3 +263,35 @@ async def test_handoff_and_final_instructions():
     await graph(model, "research", "tasks").ainvoke({"messages": [HumanMessage("x")]}, cfg)
     assert "You are step 1 of 2. The 'tasks' agent acts next." in model.seen[0][0].content
     assert "ONE short final answer" in model.seen[1][0].content
+
+
+async def test_fetch_policy_drops_tiny_max_length():
+    from jarvis.graph import ARG_POLICIES
+
+    assert ARG_POLICIES["fetch"]({"url": "u", "max_length": 100}) == {"url": "u"}
+    assert ARG_POLICIES["fetch"]({"url": "u", "max_length": 8000}) == {"url": "u", "max_length": 8000}
+
+
+async def test_empty_handoff_is_replaced_with_tool_findings():
+    model = fake(call("calculator", {"expression": "2+2"}), AIMessage(""), AIMessage("final"))
+    out = await graph(model, "assistant", "tasks").ainvoke({"messages": [HumanMessage("x")]}, cfg)
+    notes = [m.content for m in out["messages"] if isinstance(m, AIMessage) and "Findings" in str(m.content)]
+    assert notes == ["Findings from the assistant agent:\n4"]
+
+
+async def test_complete_requires_lookup_and_approval_shows_title():
+    @tool
+    def complete_task(task_id: int) -> str:
+        """Complete a task (test double)."""
+        return f"completed #{task_id}"
+
+    ADDED.extend(["#1 Renew passport | high priority", "#3 Buy milk"])
+    model = fake(call("complete_task", {"task_id": 3}, id="a"),      # guesses without looking
+                 call("complete_task", {"task_id": 1}, id="b"),      # retries after the listing
+                 AIMessage("Completed the passport task."))
+    g = graph(model, "tasks", tools=[*ALL_TOOLS, complete_task], approval_tools={"complete_task"})
+    out = await g.ainvoke({"messages": [HumanMessage("mark the passport task done")]}, cfg)
+    first = [m for m in out["messages"] if getattr(m, "tool_call_id", None) == "a"][0]
+    assert first.content.startswith("error: look up the right number first")
+    assert "#1 Renew passport" in first.content
+    assert out["__interrupt__"][0].value["target"] == "#1 Renew passport | high priority"

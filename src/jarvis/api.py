@@ -10,16 +10,13 @@ from typing import Literal
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.types import Command
 from pydantic import BaseModel
 
 from .agents import Router
 from .config import get_settings
-from .graph import build_graph, current_turn, text_of
-from .llm import get_chat_model
-from .mcp_client import ROOT
-from .tools import get_tools
+from .graph import current_turn, text_of
+from .runtime import build_runtime
 
 
 class ChatIn(BaseModel):
@@ -53,31 +50,8 @@ def create_app(model=None, router: Router | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         async with AsyncExitStack() as stack:
-            if settings.database_url:
-                from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-
-                saver = await stack.enter_async_context(
-                    AsyncPostgresSaver.from_conn_string(settings.database_url))
-                await saver.setup()
-                from .rag.store import VectorStore
-
-                VectorStore(settings.database_url, settings.embed_dim).ensure_schema()
-            else:
-                saver = InMemorySaver()
-            tools = get_tools(settings)
-            if settings.mcp_config:
-                from .mcp_client import open_mcp_tools
-
-                tools += await open_mcp_tools(stack, settings.mcp_config, {t.name for t in tools},
-                                              env={"database_url": settings.database_url})
-            app.state.tools = [t.name for t in tools]
-            app.state.graph = build_graph(
-                model or get_chat_model(settings), saver, settings.system_prompt,
-                tools=tools, router=router,
-                retriever=_retriever() if settings.database_url else None,
-                approval_tools=set(settings.approval_tools),
-                sandbox_dir=str(ROOT / "sandbox"))
-            app.state.memory = "postgres" if settings.database_url else "in-memory"
+            rt = await build_runtime(stack, settings, model=model, router=router)
+            app.state.graph, app.state.tools, app.state.memory = rt.graph, rt.tools, rt.memory
             yield
 
     app = FastAPI(title="Jarvis Agent", lifespan=lifespan)

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
 
     ollama_model: str = "qwen2.5:7b-instruct"
     ollama_base_url: str = "http://localhost:11434"
+    # 0 = deterministic: reproducible evals and steadier tool calls (Ollama default is 0.8).
+    ollama_temperature: float = 0.0
 
     # Postgres (with pgvector). Empty = memory in RAM only and no knowledge base.
     database_url: str = ""
@@ -27,13 +29,21 @@ class Settings(BaseSettings):
     # Tools that pause for the user's approval before running (human-in-the-loop).
     approval_tools: list[str] = ["add_task", "complete_task"]
 
+    # Tracing: "phoenix" sends OpenTelemetry traces to a local Arize Phoenix
+    # (docker compose --profile tracing up -d; UI at http://localhost:6006). "" = off.
+    tracing: str = ""
+    phoenix_endpoint: str = "http://localhost:6006/v1/traces"
+    tracing_project: str = "jarvis"
+
     # RAG
     embed_model: str = "nomic-embed-text"
     embed_dim: int = 768
     rerank_model: str = "ms-marco-MiniLM-L-12-v2"  # FlashRank; empty = no reranking
     rag_candidates: int = 20   # hybrid-search candidates sent to the reranker
     rag_top_n: int = 5         # passages given to the LLM
-    rag_min_score: float = 0.05  # drop reranked passages below this relevance
+    # Drop reranked passages below this relevance. Calibrated on the eval set: answerable
+    # questions scored >= 0.03, unanswerable ones 0.0000, so 0.01 separates them.
+    rag_min_score: float = 0.01
 
     system_prompt: str = (
         "You are Jarvis, a concise personal assistant. Use tools when they help. "

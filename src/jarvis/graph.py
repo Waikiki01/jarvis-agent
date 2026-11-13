@@ -20,7 +20,7 @@ from datetime import date
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from langgraph.graph import START, END, MessagesState, StateGraph
+from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import interrupt
 
 from .agents import DEFAULT, SPECIALISTS, Router, make_router
@@ -30,6 +30,25 @@ REFUSAL_REPLY = "Sorry, I can't help with that request."
 MAX_TOOL_ROUNDS = 6  # per specialist, stops tool-call loops
 _CLAIM = re.compile(
     r"\b(added|created|marked|completed|saved|deleted|removed|updated|scheduled)\b", re.I)
+
+
+def _fetch_policy(args: dict) -> dict:
+    # The model sometimes asks fetch for max_length=100, truncating the page to nothing useful.
+    if int(args.get("max_length") or 5000) < 2000:
+        args = {k: v for k, v in args.items() if k != "max_length"}
+    return args
+
+
+# Tool-argument policies enforced in code (the model's arguments are not trusted blindly).
+ARG_POLICIES = {"fetch": _fetch_policy}
+
+# Preconditions: an action may only run after a lookup tool ran this turn. Stops the model
+# from guessing an id - and the user from approving "complete task #3" blind.
+PRECONDITIONS = {"complete_task": "list_tasks"}
+
+
+def _task_line(listing: str, task_id) -> str | None:
+    return next((ln for ln in listing.splitlines() if ln.startswith(f"#{task_id} ")), None)
 
 
 class State(MessagesState):
@@ -122,28 +141,57 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
         allowed = {t.name for t in specialists[active(state)][1]}
         # Ask for every approval BEFORE running anything: on resume LangGraph re-runs this
         # node from the top, so no tool may have run before the last interrupt().
+        turn = current_turn(state["messages"])
+        lookups: dict[str, str] = {}
+        for m in turn:
+            if isinstance(m, ToolMessage):
+                lookups[m.name] = str(m.content)
+                for need in PRECONDITIONS.values():  # an automatic lookup counts too
+                    marker = f"Result of {need}:\n"
+                    if marker in str(m.content):
+                        lookups[need] = str(m.content).split(marker, 1)[1]
+        blocked = {}  # tool_call id -> result text, for unmet preconditions
+        for tc in calls:
+            need = PRECONDITIONS.get(tc["name"])
+            if need and need not in lookups and need in by_name:
+                listing = text_of(await by_name[need].ainvoke({}))
+                blocked[tc["id"]] = (f"error: look up the right number first - do not guess. "
+                                     f"Result of {need}:\n{listing}")
         approved = {}
         for tc in calls:
-            if tc["name"] in action_tools and tc["name"] in allowed:
-                decision = interrupt({"tool": tc["name"], "args": tc["args"]})
+            if tc["name"] in action_tools and tc["name"] in allowed and tc["id"] not in blocked:
+                request = {"tool": tc["name"], "args": tc["args"]}
+                if tc["name"] == "complete_task" and "list_tasks" in lookups:
+                    request["target"] = _task_line(lookups["list_tasks"], tc["args"].get("task_id"))
+                decision = interrupt(request)
                 approved[tc["id"]] = isinstance(decision, dict) and decision.get("approved") is True
         out = []
         for tc in calls:
             if tc["name"] not in allowed:
                 result = f"error: tool {tc['name']!r} is not available to this agent"
+            elif tc["id"] in blocked:
+                result = blocked[tc["id"]]
             elif approved.get(tc["id"]) is False:
                 result = "error: the user rejected this action. Do not retry it."
             else:
                 try:
-                    result = text_of(await by_name[tc["name"]].ainvoke(tc["args"]))
+                    args = ARG_POLICIES.get(tc["name"], lambda a: a)(dict(tc["args"]))
+                    result = text_of(await by_name[tc["name"]].ainvoke(args))
                 except Exception as e:
                     result = f"error: {e}"
             out.append(ToolMessage(content=str(result), tool_call_id=tc["id"], name=tc["name"]))
         return {"messages": out}
 
     def advance(state: State):
-        updates: dict = {"step": state.get("step", 0) + 1}
+        step, plan = state.get("step", 0), state.get("plan") or []
+        updates: dict = {"step": step + 1}
         last = state["messages"][-1]
+        if (step < len(plan) - 1 and isinstance(last, AIMessage) and not last.tool_calls
+                and not text_of(last.content).strip()):
+            # Empty hand-off note: pass on what this agent's tools found instead.
+            found = [str(m.content) for m in current_turn(state["messages"]) if isinstance(m, ToolMessage)]
+            note = found[-1][:2000] if found else "nothing found"
+            updates["messages"] = [AIMessage(f"Findings from the {plan[step]} agent:\n{note}", id=last.id)]
         if getattr(last, "tool_calls", None):  # hit MAX_TOOL_ROUNDS with calls pending
             updates["messages"] = [
                 *[ToolMessage("error: stopped, too many tool calls", tool_call_id=tc["id"],

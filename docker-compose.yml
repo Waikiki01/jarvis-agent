@@ -11,5 +11,13 @@ services:
       test: ["CMD-SHELL", "pg_isready -U jarvis"]
       interval: 5s
       retries: 10
+  phoenix:                       # tracing UI: docker compose --profile tracing up -d
+    image: arizephoenix/phoenix:version-20.27.0
+    profiles: [tracing]
+    ports: ["6006:6006"]          # UI + OTLP/HTTP traces at /v1/traces
+    volumes: [phoenix:/mnt/data]
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
 volumes:
   pgdata:
+  phoenix:

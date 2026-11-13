@@ -24,6 +24,6 @@ def get_chat_model(settings: Settings | None = None) -> BaseChatModel:
     if s.llm_provider == "ollama":
         from langchain_ollama import ChatOllama
 
-        return ChatOllama(model=s.ollama_model, base_url=s.ollama_base_url)
+        return ChatOllama(model=s.ollama_model, base_url=s.ollama_base_url, temperature=s.ollama_temperature)
 
     raise ValueError(f"unknown llm_provider: {s.llm_provider}")

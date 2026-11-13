@@ -1,5 +1,7 @@
 # Jarvis Agent
 
+[![CI](https://github.com/Waikiki01/jarvis-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/Waikiki01/jarvis-agent/actions/workflows/ci.yml)
+
 A personal AI assistant built as a production-style agentic system:
 **LangGraph** multi-agent orchestration, **RAG** on **Postgres + pgvector**, **MCP** tools,
 streaming **FastAPI**, with evals and tracing. Runs **fully local and free** by default (Ollama),
@@ -17,7 +19,7 @@ LangGraph supervisor ── Postgres checkpointer (memory, human approval)
    ├─ Research agent  ── MCP client → web / GitHub / filesystem MCP servers
    ├─ Action agent    ── MCP client → own MCP server (notes, tasks, calendar)
    └─ Long-term memory ── user facts in pgvector
-Langfuse tracing · eval suite (golden set + RAGAS) · Docker Compose · CI
+Phoenix tracing (OpenTelemetry) · golden-set evals with a CI-style gate · Docker Compose · GitHub Actions
 ```
 
 ## Roadmap
@@ -28,7 +30,7 @@ Langfuse tracing · eval suite (golden set + RAGAS) · Docker Compose · CI
 | 2 | RAG: ingestion, chunking, hybrid search, reranking, citations | ✅ |
 | 3 | MCP: own server + client for external servers | ✅ |
 | 4 | Multi-agent supervisor + human-in-the-loop approval | ✅ |
-| 5 | Evals (golden set, RAGAS) + Langfuse tracing + CI gate | ⏳ |
+| 5 | Evals (golden set, retrieval metrics, gate) + Phoenix tracing + CI | ✅ |
 | 6 | Orb/voice UI, demo video | ⏳ |
 
 ## Quick start
@@ -142,6 +144,51 @@ Found in live testing (7B local model) and fixed:
 | LLM router sent "what is my printer IP?" to `research` (15 s, wrong) | No keyword → `assistant` directly (3 s, correct) |
 | Research agent used relative paths; filesystem server needs absolute | Sandbox path injected into its prompt |
 | Two-step reply presented the shopping list as the to-do list | Hand-off notes hidden; final agent answers only from tool results |
+
+## Evals
+
+```bash
+python evals/run.py            # 27 golden cases against the full stack, fresh jarvis_eval DB
+python evals/run.py --only rag # one category or case id;  --offline skips web cases
+```
+
+[`evals/golden.yaml`](evals/golden.yaml) covers RAG answers + citations, refusing facts that
+aren't in the notes, tools, tasks with approve/reject, files, web fetch, a two-agent request,
+and a **prompt injection** hidden in a sandbox file. Checks are deterministic (expected facts,
+citations, routing, which action was submitted for approval and with which arguments), plus
+retrieval **hit@5** and **MRR** measured on the retriever alone. Thresholds in the YAML make it
+a gate (exit code 1 on a miss). Report: [`evals/results/latest.md`](evals/results/latest.md).
+
+**Result (local `qwen2.5:7b-instruct`, free): 85% → 100%**, retrieval hit@5 100%, MRR 1.00,
+median latency 1.1 s. Every fix came from a failing case:
+
+| Failing case | Root cause | Fix |
+|---|---|---|
+| `rag-tyres` | right passage scored 0.03, cut-off was a guessed 0.05 | **calibrated** on the eval: answerable ≥ 0.03, unanswerable 0.0000 → 0.01 |
+| `research-fetch` | model asked `fetch(max_length=100)` | tool-argument policy in code |
+| `multi-shopping-to-task` | empty hand-off note; tasks agent asked "proceed?" | pass tool findings on; tell the agent approval is automatic |
+| `task-complete` | model **guessed** task #3 (passport was #1); approval showed only an id → user could approve the wrong task blind | precondition in code: `list_tasks` before `complete_task`; approval shows the task's title |
+| flaky results between runs | Ollama default temperature 0.8 | temperature 0 → identical scores on repeat runs |
+| `refuse-bank` | grader didn't accept "I don't have access…" | grader fixed (an eval bug, not a model bug) |
+
+Baseline report kept in [`evals/results/baseline_2026-11-13.md`](evals/results/baseline_2026-11-13.md).
+
+## Tracing
+
+```bash
+docker compose --profile tracing up -d          # Arize Phoenix, http://localhost:6006
+JARVIS_TRACING=phoenix uvicorn --app-dir src jarvis.api:app
+```
+
+Every turn becomes an OpenTelemetry trace: router → prepare → agent → tools → verify, each LLM
+call with its prompt, output and latency. Phoenix was chosen over self-hosted Langfuse because
+it is one container and fully local; both speak OpenTelemetry.
+
+## CI
+
+GitHub Actions runs `ruff` and the test suite on every push, against a real pgvector service
+container and real MCP stdio servers (LLM and embeddings are faked, so CI needs no GPU).
+The LLM evals need Ollama and run locally (`python evals/run.py`).
 
 ## Tests
 
