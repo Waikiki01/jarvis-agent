@@ -8,8 +8,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="JARVIS_", extra="ignore")
 
-    # Which LLM to use: "anthropic" (Claude API) or "ollama" (local, offline).
-    llm_provider: Literal["anthropic", "ollama"] = "anthropic"
+    # Which LLM to use: "ollama" (local, free, offline - default) or "anthropic" (Claude API, paid).
+    llm_provider: Literal["anthropic", "ollama"] = "ollama"
 
     anthropic_model: str = "claude-opus-5-5"
     # low | medium | high | xhigh | max. Opus 5.5 defaults to medium if unset.
