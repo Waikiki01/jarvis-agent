@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from .config import get_settings
 from .graph import build_graph
 from .llm import get_chat_model
+from .tools import get_tools
 
 
 class ChatIn(BaseModel):
@@ -31,6 +32,12 @@ def text_of(content) -> str:
     return "".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
 
 
+def _retriever():
+    from .rag import get_retriever
+
+    return get_retriever()
+
+
 def create_app(model=None) -> FastAPI:
     """`model` is injectable for tests; by default it comes from settings."""
     settings = get_settings()
@@ -44,10 +51,15 @@ def create_app(model=None) -> FastAPI:
                 saver = await stack.enter_async_context(
                     AsyncPostgresSaver.from_conn_string(settings.database_url))
                 await saver.setup()
+                from .rag.store import VectorStore
+
+                VectorStore(settings.database_url, settings.embed_dim).ensure_schema()
             else:
                 saver = InMemorySaver()
             app.state.graph = build_graph(
-                model or get_chat_model(settings), saver, settings.system_prompt)
+                model or get_chat_model(settings), saver, settings.system_prompt,
+                tools=get_tools(settings),
+                retriever=_retriever() if settings.database_url else None)
             app.state.memory = "postgres" if settings.database_url else "in-memory"
             yield
 
@@ -56,6 +68,17 @@ def create_app(model=None) -> FastAPI:
     @app.get("/health")
     async def health():
         return {"ok": True, "provider": settings.llm_provider, "memory": app.state.memory}
+
+    @app.get("/search")
+    def search(q: str):
+        """Debug view of retrieval: final ranking plus each hit's vector/text rank."""
+        from .rag import get_retriever
+
+        if not settings.database_url:
+            return {"error": "no database configured"}
+        return [{"citation": h.citation, "score": round(h.score, 4), "vec_rank": h.vec_rank,
+                 "txt_rank": h.txt_rank, "text": h.content[:300]}
+                for h in get_retriever().search(q)]
 
     @app.post("/chat", response_model=ChatOut)
     async def chat(body: ChatIn):

@@ -85,3 +85,32 @@ def test_api_rest_and_websocket():
                 events.append(e)
         text = "".join(e["text"] for e in events if e["type"] == "token")
         assert text == "streamed reply"
+
+
+class FakeRetriever:
+    def __init__(self, hits):
+        self.hits, self.queries = hits, []
+
+    def search(self, q):
+        self.queries.append(q)
+        return self.hits
+
+
+async def test_retrieve_node_injects_passages():
+    from jarvis.rag.store import Hit
+
+    hit = Hit(id=1, content="[notes]\nPrinter IP is 192.168.0.20", source="notes.md",
+              title="notes", chunk_index=0, metadata={}, score=0.9)
+    retriever, model = FakeRetriever([hit]), fake(AIMessage("It is 192.168.0.20 [1]."))
+    g = build_graph(model, InMemorySaver(), system_prompt="sys", retriever=retriever)
+    await g.ainvoke({"messages": [HumanMessage("printer ip?")]}, cfg)
+    assert retriever.queries == ["printer ip?"]
+    system = model.seen[0][0].content
+    assert "[1] (source: notes.md #0)" in system and "192.168.0.20" in system
+
+
+async def test_no_relevant_passages_means_no_context():
+    model = fake(AIMessage("I couldn't find it."))
+    g = build_graph(model, InMemorySaver(), system_prompt="sys", retriever=FakeRetriever([]))
+    await g.ainvoke({"messages": [HumanMessage("wife's birthday?")]}, cfg)
+    assert model.seen[0][0].content == "sys"

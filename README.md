@@ -25,7 +25,7 @@ Langfuse tracing · eval suite (golden set + RAGAS) · Docker Compose · CI
 | Step | Scope | Status |
 |---|---|---|
 | 1 | FastAPI + LangGraph agent, tools, streaming, memory, Claude/Ollama switch | ✅ |
-| 2 | RAG: ingestion, chunking, hybrid search, reranking, citations | ⏳ |
+| 2 | RAG: ingestion, chunking, hybrid search, reranking, citations | ✅ |
 | 3 | MCP: own server + client for external servers | ⏳ |
 | 4 | Multi-agent supervisor + human-in-the-loop approval | ⏳ |
 | 5 | Evals (golden set, RAGAS) + Langfuse tracing + CI gate | ⏳ |
@@ -50,10 +50,37 @@ curl -s -X POST localhost:8000/chat -H 'content-type: application/json' \
 WebSocket `/ws`: send `{"message": "...", "thread_id": "..."}`; receive
 `token`, `tool_call`, `tool_result`, `done` or `error` events.
 
+## Knowledge base (RAG)
+
+```bash
+.venv/bin/python -m jarvis.rag.ingest samples/      # md / txt / pdf; unchanged files are skipped
+curl -s "localhost:8000/search?q=printer%20ip"      # debug view: score, vector rank, keyword rank
+```
+
+```
+question ─▶ retrieve node (every turn, in code)
+             ├─ embed (nomic-embed-text, "search_query:" prefix)
+             ├─ hybrid search in Postgres: pgvector HNSW (cosine)  +  full-text (tsvector, GIN)
+             │     merged with Reciprocal Rank Fusion: 1/(60+rank_vec) + 1/(60+rank_text)
+             ├─ rerank top 20 with a local cross-encoder (FlashRank MiniLM, CPU)
+             └─ drop passages below a relevance score ─▶ numbered passages [1] [2] ...
+          ─▶ agent (LLM answers only from passages, cites [n]; may call search_knowledge again)
+```
+
+What made the difference (measured on the sample docs):
+
+| Problem found | Fix | Effect |
+|---|---|---|
+| 7B model often **didn't call** the search tool | Retrieval runs in code before the LLM; the tool stays for follow-ups | Unanswered questions about the docs → answered |
+| Keyword search ANDed all words ("time" not in text → no match) | OR the words, rank by `ts_rank_cd` | Keyword side matches again |
+| Whole note in one 600-char chunk → reranker score 0.009 | Section-aware chunks with heading path `[Doc > Section]` | Same question scored 0.374 |
+| Irrelevant passages invite made-up answers | Cross-encoder score cut-off | "What is my wife's birthday?" → "couldn't find it" |
+
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q     # offline: a fake model replaces the LLM
+.venv/bin/python -m pytest -q     # fake LLM + fake embedder; RAG store tests use a throwaway
+                                  # jarvis_test DB (skipped if docker Postgres isn't running)
 ```
 
 ## Design notes

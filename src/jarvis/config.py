@@ -18,12 +18,25 @@ class Settings(BaseSettings):
     ollama_model: str = "qwen2.5:7b-instruct"
     ollama_base_url: str = "http://localhost:11434"
 
-    # Postgres (with pgvector). Empty = keep conversation memory in RAM only.
+    # Postgres (with pgvector). Empty = memory in RAM only and no knowledge base.
     database_url: str = ""
+
+    # RAG
+    embed_model: str = "nomic-embed-text"
+    embed_dim: int = 768
+    rerank_model: str = "ms-marco-MiniLM-L-12-v2"  # FlashRank; empty = no reranking
+    rag_candidates: int = 20   # hybrid-search candidates sent to the reranker
+    rag_top_n: int = 5         # passages given to the LLM
+    rag_min_score: float = 0.05  # drop reranked passages below this relevance
 
     system_prompt: str = (
         "You are Jarvis, a concise personal assistant. Use tools when they help. "
-        "If you are not sure, say so instead of guessing."
+        "When passages from the user's knowledge base are provided, answer questions about "
+        "the user's notes, documents or plans only from those passages, quote the exact "
+        "facts (dates, numbers, names) and cite them like [1]. Do not add details that "
+        "are not in the passages. If no passages are provided or they don't contain the "
+        "answer, you may call search_knowledge with different words; if that also finds "
+        "nothing, say you couldn't find it in the knowledge base. Never guess."
     )
 
 
