@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # MCP servers to connect (JSON file, relative to the repo root). Empty = none.
     mcp_config: str = "mcp_servers.json"
 
+    # Tools that pause for the user's approval before running (human-in-the-loop).
+    approval_tools: list[str] = ["add_task", "complete_task"]
+
     # RAG
     embed_model: str = "nomic-embed-text"
     embed_dim: int = 768

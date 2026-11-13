@@ -1,17 +1,24 @@
 """FastAPI gateway: REST for simple calls, WebSocket for streamed tokens and agent events.
 
-Run:  uvicorn jarvis.api:app --reload
+Run:  uvicorn --app-dir src jarvis.api:app --reload
+
+Human-in-the-loop: when an action needs approval the turn pauses and the reply has
+status "needs_approval" plus the pending action; POST /approve resumes it.
 """
 from contextlib import AsyncExitStack, asynccontextmanager
+from typing import Literal
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from langchain_core.messages import AIMessageChunk, HumanMessage, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.types import Command
 from pydantic import BaseModel
 
+from .agents import Router
 from .config import get_settings
-from .graph import build_graph
+from .graph import build_graph, current_turn, text_of
 from .llm import get_chat_model
+from .mcp_client import ROOT
 from .tools import get_tools
 
 
@@ -20,16 +27,17 @@ class ChatIn(BaseModel):
     thread_id: str = "default"
 
 
+class ApproveIn(BaseModel):
+    thread_id: str = "default"
+    approved: bool
+
+
 class ChatOut(BaseModel):
-    reply: str
     thread_id: str
-
-
-def text_of(content) -> str:
-    """Text from a message's content (a string, or a list of content blocks)."""
-    if isinstance(content, str):
-        return content
-    return "".join(b.get("text", "") for b in content if isinstance(b, dict) and b.get("type") == "text")
+    status: Literal["done", "needs_approval"]
+    reply: str = ""
+    approval: dict | None = None   # {"tool": ..., "args": {...}} when status=needs_approval
+    agents: list[str] = []         # specialists that handled the turn
 
 
 def _retriever():
@@ -38,8 +46,8 @@ def _retriever():
     return get_retriever()
 
 
-def create_app(model=None) -> FastAPI:
-    """`model` is injectable for tests; by default it comes from settings."""
+def create_app(model=None, router: Router | None = None) -> FastAPI:
+    """`model` and `router` are injectable for tests; by default they come from settings."""
     settings = get_settings()
 
     @asynccontextmanager
@@ -65,48 +73,90 @@ def create_app(model=None) -> FastAPI:
             app.state.tools = [t.name for t in tools]
             app.state.graph = build_graph(
                 model or get_chat_model(settings), saver, settings.system_prompt,
-                tools=tools,
-                retriever=_retriever() if settings.database_url else None)
+                tools=tools, router=router,
+                retriever=_retriever() if settings.database_url else None,
+                approval_tools=set(settings.approval_tools),
+                sandbox_dir=str(ROOT / "sandbox"))
             app.state.memory = "postgres" if settings.database_url else "in-memory"
             yield
 
     app = FastAPI(title="Jarvis Agent", lifespan=lifespan)
 
+    def cfg(thread_id: str) -> dict:
+        return {"configurable": {"thread_id": thread_id}}
+
+    async def pending(thread_id: str) -> dict | None:
+        snap = await app.state.graph.aget_state(cfg(thread_id))
+        return next((i.value for t in snap.tasks for i in t.interrupts), None)
+
+    async def result(thread_id: str) -> ChatOut:
+        snap = await app.state.graph.aget_state(cfg(thread_id))
+        if action := next((i.value for t in snap.tasks for i in t.interrupts), None):
+            return ChatOut(thread_id=thread_id, status="needs_approval", approval=action,
+                           agents=snap.values.get("plan", []))
+        # The final answer only: earlier specialists' messages are hand-off notes.
+        turn = current_turn(snap.values.get("messages", []))
+        final = next((m for m in reversed(turn) if isinstance(m, AIMessage) and not m.tool_calls), None)
+        return ChatOut(thread_id=thread_id, status="done", reply=text_of(final.content) if final else "",
+                       agents=snap.values.get("plan", []))
+
+    async def start_turn(thread_id: str, message: str):
+        """Input for a new user message. A still-pending approval is rejected first, so a
+        half-finished action never runs later by surprise."""
+        if await pending(thread_id):
+            await app.state.graph.ainvoke(Command(resume={"approved": False}), cfg(thread_id))
+        return {"messages": [HumanMessage(message)]}
+
     @app.get("/health")
     async def health():
         return {"ok": True, "provider": settings.llm_provider, "memory": app.state.memory,
-                "tools": app.state.tools}
+                "tools": app.state.tools, "approval_tools": settings.approval_tools}
 
     @app.get("/search")
     def search(q: str):
         """Debug view of retrieval: final ranking plus each hit's vector/text rank."""
-        from .rag import get_retriever
-
         if not settings.database_url:
             return {"error": "no database configured"}
         return [{"citation": h.citation, "score": round(h.score, 4), "vec_rank": h.vec_rank,
                  "txt_rank": h.txt_rank, "text": h.content[:300]}
-                for h in get_retriever().search(q)]
+                for h in _retriever().search(q)]
 
     @app.post("/chat", response_model=ChatOut)
     async def chat(body: ChatIn):
-        cfg = {"configurable": {"thread_id": body.thread_id}}
-        out = await app.state.graph.ainvoke({"messages": [HumanMessage(body.message)]}, cfg)
-        return ChatOut(reply=text_of(out["messages"][-1].content), thread_id=body.thread_id)
+        await app.state.graph.ainvoke(await start_turn(body.thread_id, body.message), cfg(body.thread_id))
+        return await result(body.thread_id)
+
+    @app.post("/approve", response_model=ChatOut)
+    async def approve(body: ApproveIn):
+        if not await pending(body.thread_id):
+            return await result(body.thread_id)
+        await app.state.graph.ainvoke(Command(resume={"approved": body.approved}), cfg(body.thread_id))
+        return await result(body.thread_id)
 
     @app.websocket("/ws")
     async def ws(socket: WebSocket):
-        """Client sends {"message", "thread_id"}; server streams events:
-        token | tool_call | tool_result | done | error."""
+        """Client sends {"message", "thread_id"} or {"approved": bool, "thread_id"}.
+        Server streams: route | token | tool_call | tool_result, then
+        approval_required {approval} or done {reply, agents}; error on failure."""
         await socket.accept()
         try:
             while True:
-                body = ChatIn(**await socket.receive_json())
-                cfg = {"configurable": {"thread_id": body.thread_id}}
+                data = await socket.receive_json()
+                thread_id = data.get("thread_id", "default")
                 try:
-                    async for msg, _meta in app.state.graph.astream(
-                        {"messages": [HumanMessage(body.message)]}, cfg, stream_mode="messages"
-                    ):
+                    if "approved" in data:
+                        inp = Command(resume={"approved": bool(data["approved"])})
+                    else:
+                        inp = await start_turn(thread_id, data["message"])
+                    async for mode, chunk in app.state.graph.astream(
+                            inp, cfg(thread_id), stream_mode=["messages", "updates"]):
+                        if mode == "updates":
+                            if "router" in chunk:
+                                await socket.send_json({"type": "route", "agents": chunk["router"]["plan"]})
+                            continue
+                        msg, meta = chunk
+                        if meta.get("langgraph_node") != "agent" and not isinstance(msg, ToolMessage):
+                            continue  # e.g. the router's JSON
                         if isinstance(msg, AIMessageChunk):
                             if t := text_of(msg.content):
                                 await socket.send_json({"type": "token", "text": t})
@@ -116,7 +166,11 @@ def create_app(model=None) -> FastAPI:
                         elif isinstance(msg, ToolMessage):
                             await socket.send_json(
                                 {"type": "tool_result", "name": msg.name, "content": str(msg.content)[:500]})
-                    await socket.send_json({"type": "done"})
+                    out = await result(thread_id)
+                    if out.status == "needs_approval":
+                        await socket.send_json({"type": "approval_required", "approval": out.approval})
+                    else:  # final, verified text (may differ from the streamed tokens)
+                        await socket.send_json({"type": "done", "reply": out.reply, "agents": out.agents})
                 except Exception as e:  # keep the socket open after a failed turn
                     await socket.send_json({"type": "error", "message": str(e)})
         except WebSocketDisconnect:

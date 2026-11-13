@@ -27,7 +27,7 @@ Langfuse tracing · eval suite (golden set + RAGAS) · Docker Compose · CI
 | 1 | FastAPI + LangGraph agent, tools, streaming, memory, Claude/Ollama switch | ✅ |
 | 2 | RAG: ingestion, chunking, hybrid search, reranking, citations | ✅ |
 | 3 | MCP: own server + client for external servers | ✅ |
-| 4 | Multi-agent supervisor + human-in-the-loop approval | ⏳ |
+| 4 | Multi-agent supervisor + human-in-the-loop approval | ✅ |
 | 5 | Evals (golden set, RAGAS) + Langfuse tracing + CI gate | ⏳ |
 | 6 | Orb/voice UI, demo video | ⏳ |
 
@@ -106,6 +106,42 @@ Use the tasks server from any MCP client, e.g. Claude Desktop on Windows with th
 ```
 
 Or over HTTP: `python -m jarvis.mcp_server.tasks --http` → `http://127.0.0.1:8765/mcp`.
+
+## Multi-agent supervisor + human approval
+
+```
+START → router → prepare → agent ⇄ tools → advance ─┬─▶ verify → END
+                   ▲                                 │
+                   └────────── next specialist ──────┘
+```
+
+| Specialist | Tools (only these) | Handles |
+|---|---|---|
+| `assistant` | `search_knowledge`, `calculator`, `current_time` + RAG passages | notes, documents, maths, chat |
+| `tasks` | `add_task`, `list_tasks`, `complete_task` | to-do list |
+| `research` | `read_text_file`, `list_directory`, `search_files`, `fetch` | sandbox files, web pages |
+
+- **Router**: keyword fast path (no LLM, ~0 ms; no match → `assistant`). Only requests that
+  span two specialists go to an LLM router with a JSON-schema answer, which orders them
+  (e.g. `research` → `tasks` for "add the item on my shopping list as a task").
+- **Hand-off**: a non-final specialist reports only the facts the next one needs; the last one
+  writes the single answer the user sees.
+- **Human-in-the-loop**: tools in `approval_tools` (`add_task`, `complete_task`) call LangGraph
+  `interrupt()`. `/chat` returns `status: "needs_approval"` with the pending action;
+  `POST /approve {"thread_id", "approved"}` resumes. All approvals are collected *before*
+  any tool runs, because resuming re-executes the node (prevents double actions).
+  A new message while an approval is pending rejects it first.
+- **Verification in code**: if the final reply claims an action ("added", "marked"…) but no
+  action tool succeeded this turn, the reply is replaced with the truth.
+
+Found in live testing (7B local model) and fixed:
+
+| Problem | Fix |
+|---|---|
+| After a tool error the model said *"I have manually marked the task as done"* | `verify` node replaces unconfirmed action claims |
+| LLM router sent "what is my printer IP?" to `research` (15 s, wrong) | No keyword → `assistant` directly (3 s, correct) |
+| Research agent used relative paths; filesystem server needs absolute | Sandbox path injected into its prompt |
+| Two-step reply presented the shopping list as the to-do list | Hand-off notes hidden; final agent answers only from tool results |
 
 ## Tests
 
