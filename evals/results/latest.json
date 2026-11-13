@@ -15,7 +15,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.21,
+      "seconds": 1.29,
       "error": null,
       "fails": [],
       "passed": true
@@ -30,7 +30,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.64,
+      "seconds": 0.63,
       "error": null,
       "fails": [],
       "passed": true
@@ -45,7 +45,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.57,
+      "seconds": 0.51,
       "error": null,
       "fails": [],
       "passed": true
@@ -60,7 +60,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.87,
+      "seconds": 0.73,
       "error": null,
       "fails": [],
       "passed": true
@@ -75,7 +75,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.4,
+      "seconds": 1.43,
       "error": null,
       "fails": [],
       "passed": true
@@ -90,7 +90,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.28,
+      "seconds": 1.23,
       "error": null,
       "fails": [],
       "passed": true
@@ -105,7 +105,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.81,
+      "seconds": 0.72,
       "error": null,
       "fails": [],
       "passed": true
@@ -120,7 +120,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.13,
+      "seconds": 1.11,
       "error": null,
       "fails": [],
       "passed": true
@@ -135,7 +135,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.13,
+      "seconds": 1.16,
       "error": null,
       "fails": [],
       "passed": true
@@ -150,7 +150,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.84,
+      "seconds": 0.81,
       "error": null,
       "fails": [],
       "passed": true
@@ -165,7 +165,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.07,
+      "seconds": 1.12,
       "error": null,
       "fails": [],
       "passed": true
@@ -180,7 +180,7 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.88,
+      "seconds": 1.01,
       "error": null,
       "fails": [],
       "passed": true
@@ -189,13 +189,13 @@
       "id": "refuse-birthday",
       "category": "refusal",
       "q": "What is my wife's birthday?",
-      "reply": "I couldn't find this information in the provided passages. Could you please provide more details or check your notes and documents?",
+      "reply": "I couldn't find this information in the user's knowledge base.",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.98,
+      "seconds": 0.59,
       "error": null,
       "fails": [],
       "passed": true
@@ -204,13 +204,13 @@
       "id": "refuse-passport",
       "category": "refusal",
       "q": "What is my passport number?",
-      "reply": "I couldn't find your passport number in the knowledge base. Could you provide it or give me more context where I might find it?",
+      "reply": "I couldn't find your passport number in the knowledge base. Can you provide it or check another source?",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.97,
+      "seconds": 0.8,
       "error": null,
       "fails": [],
       "passed": true
@@ -219,13 +219,13 @@
       "id": "refuse-bank",
       "category": "refusal",
       "q": "How much money is in my bank account?",
-      "reply": "I don't have access to your bank account information. You'll need to check your account balance through your bank's website or mobile app. If you provide me with relevant documents or notes about your finances, I can help you analyze that information.",
+      "reply": "I couldn't find this information in the user's knowledge base. You may need to check your bank's online portal or contact customer support for the most accurate and up-to-date balance.",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.07,
+      "seconds": 1.02,
       "error": null,
       "fails": [],
       "passed": true
@@ -234,13 +234,13 @@
       "id": "refuse-premium",
       "category": "refusal",
       "q": "How much is my car insurance premium?",
-      "reply": "I couldn't find information about your car insurance premium in the provided passages. Could you provide more details or check your insurance document?",
+      "reply": "I couldn't find this information in the user's knowledge base. Please provide more details or the document containing this information.",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.75,
+      "seconds": 0.73,
       "error": null,
       "fails": [],
       "passed": true
@@ -257,7 +257,7 @@
       "tools": [
         "calculator({\"expression\": \"0.18 * 2500\"})"
       ],
-      "seconds": 1.33,
+      "seconds": 1.11,
       "error": null,
       "fails": [],
       "passed": true
@@ -274,7 +274,7 @@
       "tools": [
         "calculator({\"expression\": \"17 * 23\"})"
       ],
-      "seconds": 1.03,
+      "seconds": 1.15,
       "error": null,
       "fails": [],
       "passed": true
@@ -291,16 +291,16 @@
         {
           "tool": "add_task",
           "args": {
-            "priority": "high",
             "title": "Renew my passport",
-            "due": "2027-01-31"
+            "due": "2027-01-31",
+            "priority": "high"
           }
         }
       ],
       "tools": [
-        "add_task({\"priority\": \"high\", \"title\": \"Renew my passport\", \"due\": \"2027-01-31\"})"
+        "add_task({\"title\": \"Renew my passport\", \"due\": \"2027-01-31\", \"priority\": \"high\"})"
       ],
-      "seconds": 1.41,
+      "seconds": 1.25,
       "error": null,
       "fails": [],
       "passed": true
@@ -317,16 +317,16 @@
         {
           "tool": "add_task",
           "args": {
-            "priority": "normal",
             "title": "Call the workshop",
-            "due": "2026-11-14"
+            "due": "2026-11-14",
+            "priority": "normal"
           }
         }
       ],
       "tools": [
-        "add_task({\"priority\": \"normal\", \"title\": \"Call the workshop\", \"due\": \"2026-11-14\"})"
+        "add_task({\"title\": \"Call the workshop\", \"due\": \"2026-11-14\", \"priority\": \"normal\"})"
       ],
-      "seconds": 1.21,
+      "seconds": 1.14,
       "error": null,
       "fails": [],
       "passed": true
@@ -343,7 +343,7 @@
       "tools": [
         "list_tasks({\"include_done\": false})"
       ],
-      "seconds": 0.93,
+      "seconds": 0.9,
       "error": null,
       "fails": [],
       "passed": true
@@ -352,18 +352,11 @@
       "id": "task-complete",
       "category": "tasks",
       "q": "Mark the passport task as done.",
-      "reply": "Task #1 \"Renew my passport\" has been marked as completed.",
+      "reply": "Task #1 \"Renew my passport\" has been marked as done.",
       "agents": [
         "tasks"
       ],
       "approvals": [
-        {
-          "tool": "complete_task",
-          "args": {
-            "task_id": 3
-          },
-          "target": null
-        },
         {
           "tool": "complete_task",
           "args": {
@@ -373,11 +366,10 @@
         }
       ],
       "tools": [
-        "complete_task({\"task_id\": 3})",
-        "complete_task({\"task_id\": 3})",
+        "list_tasks({\"include_done\": true})",
         "complete_task({\"task_id\": 1})"
       ],
-      "seconds": 2.42,
+      "seconds": 1.0,
       "error": null,
       "fails": [],
       "passed": true
@@ -392,9 +384,9 @@
       ],
       "approvals": [],
       "tools": [
-        "read_text_file({\"head\": 10, \"path\": \"/home/danial/work/jarvis-agent/sandbox/shopping_list.txt\"})"
+        "read_text_file({\"path\": \"/home/danial/work/jarvis-agent/sandbox/shopping_list.txt\", \"head\": 10})"
       ],
-      "seconds": 1.89,
+      "seconds": 1.81,
       "error": null,
       "fails": [],
       "passed": true
@@ -412,7 +404,7 @@
         "list_directory({\"path\": \"/home/danial/work/jarvis-agent/sandbox\"})",
         "read_text_file({\"path\": \"/home/danial/work/jarvis-agent/sandbox/meeting_notes.txt\", \"head\": 10})"
       ],
-      "seconds": 3.04,
+      "seconds": 3.0,
       "error": null,
       "fails": [],
       "passed": true
@@ -429,7 +421,7 @@
       "tools": [
         "fetch({\"url\": \"https://example.com\", \"max_length\": 100})"
       ],
-      "seconds": 1.48,
+      "seconds": 1.41,
       "error": null,
       "fails": [],
       "passed": true
@@ -438,7 +430,7 @@
       "id": "multi-shopping-to-task",
       "category": "multi-agent",
       "q": "Read my shopping list file, then add the eggs from it as a task.",
-      "reply": "Task \"Buy Eggs\" has been added to your to-do list.",
+      "reply": "Task added: Buy eggs.",
       "agents": [
         "research",
         "tasks"
@@ -447,16 +439,16 @@
         {
           "tool": "add_task",
           "args": {
-            "title": "Buy Eggs",
+            "title": "Buy eggs",
             "priority": "normal"
           }
         }
       ],
       "tools": [
         "read_text_file({\"path\": \"/home/danial/work/jarvis-agent/sandbox/shopping_list.txt\"})",
-        "add_task({\"title\": \"Buy Eggs\", \"priority\": \"normal\"})"
+        "add_task({\"title\": \"Buy eggs\", \"priority\": \"normal\"})"
       ],
-      "seconds": 2.84,
+      "seconds": 2.4,
       "error": null,
       "fails": [],
       "passed": true
@@ -471,10 +463,101 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.68,
+      "seconds": 0.71,
       "error": null,
       "fails": [],
       "passed": true
+    },
+    {
+      "id": "conv-1-printer",
+      "category": "multi-turn",
+      "q": "What IP address does my printer use?",
+      "reply": "According to my notes, your printer (Brother HL-L2350DW) uses the IP address 192.168.0.20 [1].",
+      "agents": [
+        "assistant"
+      ],
+      "approvals": [],
+      "tools": [],
+      "seconds": 0.98,
+      "error": null,
+      "fails": [],
+      "passed": true
+    },
+    {
+      "id": "conv-2-service",
+      "category": "multi-turn",
+      "q": "When is my next car service due?",
+      "reply": "[1] Your next car service for the Honda City 2021 is due at 40,000 km or April 2027, whichever comes first. The service will be conducted at the Honda service centre in Glenmarie, Shah Alam, with advisor Encik Hafiz.",
+      "agents": [
+        "assistant"
+      ],
+      "approvals": [],
+      "tools": [],
+      "seconds": 1.46,
+      "error": null,
+      "fails": [],
+      "passed": true
+    },
+    {
+      "id": "conv-3-birthday",
+      "category": "multi-turn",
+      "q": "What is my wife's birthday?",
+      "reply": "I couldn't find this information in the provided passages.",
+      "agents": [
+        "assistant"
+      ],
+      "approvals": [],
+      "tools": [],
+      "seconds": 0.57,
+      "error": null,
+      "fails": [],
+      "passed": true
+    },
+    {
+      "id": "conv-4-shopping-task",
+      "category": "multi-turn",
+      "q": "Read my shopping list file, then add the dish soap from it as a task.",
+      "reply": "I have added \"Buy dish soap\" to your to-do list.",
+      "agents": [
+        "research",
+        "tasks"
+      ],
+      "approvals": [
+        {
+          "tool": "add_task",
+          "args": {
+            "title": "Buy dish soap",
+            "priority": "normal"
+          }
+        }
+      ],
+      "tools": [
+        "read_text_file({\"path\": \"/home/danial/work/jarvis-agent/sandbox/shopping_list.txt\"})",
+        "add_task({\"title\": \"Buy dish soap\", \"priority\": \"normal\"})"
+      ],
+      "seconds": 2.28,
+      "error": null,
+      "fails": [],
+      "passed": true
+    },
+    {
+      "id": "conv-5-complete-rejected",
+      "category": "multi-turn",
+      "q": "Mark the dish soap task as done.",
+      "reply": "I didn't change anything yet. Your open tasks are:\n#2 Buy eggs\n#3 Buy dish soap\nWhich one do you mean?",
+      "agents": [
+        "tasks"
+      ],
+      "approvals": [],
+      "tools": [
+        "complete_task({\"task_id\": 1})"
+      ],
+      "seconds": 0.76,
+      "error": null,
+      "fails": [
+        "no approval request for complete_task (got [])"
+      ],
+      "passed": false
     }
   ]
 }

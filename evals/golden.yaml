@@ -12,6 +12,7 @@
 #   decide         approve | reject  (answer to approval requests; default reject)
 #   source         RAG only: file the right passage comes from (retrieval hit@k / MRR)
 #   network        needs internet (skipped with --offline)
+#   thread         cases with the same thread name share ONE conversation (multi-turn)
 # Placeholders: {tomorrow} = tomorrow as YYYY-MM-DD.
 
 thresholds:
@@ -88,3 +89,27 @@ cases:
     agents: [research]
     approval: none
     not_contains: ["routine"]
+
+  # ---- Multi-turn: one continuous conversation (replays the demo session that exposed
+  # fabricated citations and a lost multi-agent request with full history) ----
+  - {id: conv-1-printer, category: multi-turn, thread: demo, q: "What IP address does my printer use?", agents: [assistant], contains: ["192.168.0.20"], cites: true}
+  - {id: conv-2-service, category: multi-turn, thread: demo, q: "When is my next car service due?", agents: [assistant], contains: ["40,000"], cites: true}
+  - {id: conv-3-birthday, category: multi-turn, thread: demo, q: "What is my wife's birthday?", agents: [assistant], refuses: true, not_contains: ["1980", "February", "[1]"]}
+  - id: conv-4-shopping-task
+    category: multi-turn
+    thread: demo
+    q: "Read my shopping list file, then add the dish soap from it as a task."
+    agents: [research, tasks]
+    approval: {tool: add_task, args: {title: soap}}
+    decide: approve
+    contains: ["soap"]
+  # (uses dish soap, not eggs: an earlier case already adds an eggs task, and with two
+  #  "Buy eggs" tasks Jarvis correctly asks which one - right behaviour, wrong test)
+  - id: conv-5-complete-rejected
+    category: multi-turn
+    thread: demo
+    q: "Mark the dish soap task as done."
+    agents: [tasks]
+    approval: {tool: complete_task}
+    decide: reject
+    not_contains: ["has been marked", "I have marked", "marked as done", "is now complete"]

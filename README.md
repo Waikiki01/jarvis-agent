@@ -7,7 +7,18 @@ A personal AI assistant built as a production-style agentic system:
 streaming **FastAPI**, with evals and tracing. Runs **fully local and free** by default (Ollama),
 with the **Claude API** as an optional, switchable provider.
 
-## Architecture (target)
+## Demo
+
+![Jarvis demo: two agents, human approval, action complete](docs/demo.gif)
+
+Full 45-second run (real local model, nothing staged): [`docs/demo.mp4`](docs/demo.mp4): a cited answer
+from notes, an honest "couldn't find it", a research → tasks hand-off with approval, and a rejected action.
+
+| Approval card | Action complete | Phone |
+|---|---|---|
+| ![approval](docs/img/approval.png) | ![done](docs/img/action_complete.png) | ![mobile](docs/img/mobile.png) |
+
+## Architecture
 
 ```
 UI (orb + voice)
@@ -31,7 +42,7 @@ Phoenix tracing (OpenTelemetry) · golden-set evals with a CI-style gate · Dock
 | 3 | MCP: own server + client for external servers | ✅ |
 | 4 | Multi-agent supervisor + human-in-the-loop approval | ✅ |
 | 5 | Evals (golden set, retrieval metrics, gate) + Phoenix tracing + CI | ✅ |
-| 6 | Orb/voice UI, demo video | ⏳ |
+| 6 | Orb/voice UI, demo video | ✅ |
 
 ## Quick start
 
@@ -41,6 +52,7 @@ ollama pull qwen2.5:7b-instruct  # local LLM (free)
 cp .env.example .env            # optional: switch provider / enable Postgres
 docker compose up -d            # optional: Postgres + pgvector for persistent memory
 cd src && ../.venv/bin/uvicorn jarvis.api:app --reload
+# open http://localhost:8000  (the orb UI)
 ```
 
 ```bash
@@ -148,7 +160,7 @@ Found in live testing (7B local model) and fixed:
 ## Evals
 
 ```bash
-python evals/run.py            # 27 golden cases against the full stack, fresh jarvis_eval DB
+python evals/run.py            # 32 golden cases (incl. multi-turn) against the full stack, fresh jarvis_eval DB
 python evals/run.py --only rag # one category or case id;  --offline skips web cases
 ```
 
@@ -159,8 +171,9 @@ citations, routing, which action was submitted for approval and with which argum
 retrieval **hit@5** and **MRR** measured on the retriever alone. Thresholds in the YAML make it
 a gate (exit code 1 on a miss). Report: [`evals/results/latest.md`](evals/results/latest.md).
 
-**Result (local `qwen2.5:7b-instruct`, free): 85% → 100%**, retrieval hit@5 100%, MRR 1.00,
-median latency 1.1 s. Every fix came from a failing case:
+**Result (local `qwen2.5:7b-instruct`, free): 85% → 100%** on the 27 single-turn cases; **97% (31/32)**
+after adding 5 multi-turn cases (see UI section). Retrieval hit@5 100%, MRR 1.00, median latency
+~1.1 s, identical on repeat runs. Every fix came from a failing case:
 
 | Failing case | Root cause | Fix |
 |---|---|---|
@@ -189,6 +202,37 @@ it is one container and fully local; both speak OpenTelemetry.
 GitHub Actions runs `ruff` and the test suite on every push, against a real pgvector service
 container and real MCP stdio servers (LLM and embeddings are faked, so CI needs no GPU).
 The LLM evals need Ollama and run locally (`python evals/run.py`).
+
+## UI
+
+`http://localhost:8000` serves the orb UI (plain HTML/JS/canvas, no build step, works offline):
+- streams tokens and live agent activity chips (`research → tasks → ⚙ add_task → approved → ✓`)
+- **approval card** with the exact action (task title, due date, or the task being completed);
+  keys `Y` / `N`; orb turns gold and forms a "?"
+- orb states follow the backend: thinking, speaking, action complete (green ✓), error
+- the final bubble is the server's **verified** reply, which may replace streamed text
+- **free voice**: push-to-talk (hold Space) via the browser's Web Speech API, spoken replies via
+  `speechSynthesis`. No keys. Chrome sends speech audio to its own recognition service; for
+  fully offline speech, swap in faster-whisper later.
+
+### What the demo recording exposed
+
+Single-turn evals were at 100%, but a scripted **multi-turn** demo failed: with the full history,
+the 7B model **invented** "your wife's birthday is 25 February 1980 [1]" with fake sources, and a
+two-agent request was lost. Fixes, all in code:
+
+| Problem | Fix |
+|---|---|
+| Copied citation style from earlier turns with no passages | **Citation grounding check**: `[n]` must point at a passage retrieved this turn, else "couldn't find it" |
+| Long history confused the current request | **History trimming**: last 3 exchanges, no old tool chatter or `[n]` markers |
+| Hand-off note was a question back to the user | Hand-off = the previous agent's **raw tool results** |
+| Next agent saw tools it doesn't have and faked success | Each agent sees only **its own** tool calls |
+| Evals only tested fresh conversations | New **multi-turn** cases replay the demo session |
+
+**Known limitation (left failing on purpose):** deep into a conversation, when blocked for guessing a
+task number, the 7B model doesn't retry with the correct number. The user gets a safe answer
+("I didn't change anything yet. Your open tasks are: ... Which one do you mean?"), but the eval
+expects an approval request, so `conv-5` stays red rather than loosening the test.
 
 ## Tests
 

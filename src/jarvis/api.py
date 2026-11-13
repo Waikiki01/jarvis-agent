@@ -6,9 +6,11 @@ Human-in-the-loop: when an action needs approval the turn pauses and the reply h
 status "needs_approval" plus the pending action; POST /approve resumes it.
 """
 from contextlib import AsyncExitStack, asynccontextmanager
+from pathlib import Path
 from typing import Literal
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langgraph.types import Command
 from pydantic import BaseModel
@@ -150,6 +152,8 @@ def create_app(model=None, router: Router | None = None) -> FastAPI:
         except WebSocketDisconnect:
             pass
 
+    # The orb UI (static files). Mounted last so the API routes above take precedence.
+    app.mount("/", StaticFiles(directory=Path(__file__).parent / "ui", html=True), name="ui")
     return app
 
 

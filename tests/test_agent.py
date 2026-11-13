@@ -272,8 +272,8 @@ async def test_fetch_policy_drops_tiny_max_length():
     assert ARG_POLICIES["fetch"]({"url": "u", "max_length": 8000}) == {"url": "u", "max_length": 8000}
 
 
-async def test_empty_handoff_is_replaced_with_tool_findings():
-    model = fake(call("calculator", {"expression": "2+2"}), AIMessage(""), AIMessage("final"))
+async def test_handoff_is_tool_findings_not_prose():
+    model = fake(call("calculator", {"expression": "2+2"}), AIMessage("Shall I add it?"), AIMessage("final"))
     out = await graph(model, "assistant", "tasks").ainvoke({"messages": [HumanMessage("x")]}, cfg)
     notes = [m.content for m in out["messages"] if isinstance(m, AIMessage) and "Findings" in str(m.content)]
     assert notes == ["Findings from the assistant agent:\n4"]
@@ -292,6 +292,60 @@ async def test_complete_requires_lookup_and_approval_shows_title():
     g = graph(model, "tasks", tools=[*ALL_TOOLS, complete_task], approval_tools={"complete_task"})
     out = await g.ainvoke({"messages": [HumanMessage("mark the passport task done")]}, cfg)
     first = [m for m in out["messages"] if getattr(m, "tool_call_id", None) == "a"][0]
-    assert first.content.startswith("error: look up the right number first")
+    assert first.content.startswith("error: not run - the number was guessed")
     assert "#1 Renew passport" in first.content
     assert out["__interrupt__"][0].value["target"] == "#1 Renew passport | high priority"
+
+
+def test_ui_is_served():
+    app = create_app(model=fake(), router=fixed_router("assistant"))
+    with TestClient(app) as client:
+        page = client.get("/")
+        assert page.status_code == 200 and "<canvas id=\"orb\"" in page.text
+        assert client.get("/app.js").status_code == 200
+        assert client.get("/health").json()["ok"] is True   # API still wins over the static mount
+
+
+async def test_fabricated_citation_without_passages_is_replaced():
+    from jarvis.graph import NOT_FOUND_REPLY
+
+    model = fake(AIMessage("Your wife's birthday is 25 February 1980 [1]."))
+    out = await graph(model, retriever=FakeRetriever([])).ainvoke({"messages": [HumanMessage("wife's birthday?")]}, cfg)
+    assert out["messages"][-1].content == NOT_FOUND_REPLY
+
+
+async def test_real_citation_is_kept():
+    hit = Hit(id=1, content="[n]\nIP 192.168.0.20", source="n.md", title="n", chunk_index=0, metadata={}, score=0.9)
+    model = fake(AIMessage("It is 192.168.0.20 [1]."))
+    out = await graph(model, retriever=FakeRetriever([hit])).ainvoke({"messages": [HumanMessage("ip?")]}, cfg)
+    assert out["messages"][-1].content == "It is 192.168.0.20 [1]."
+
+
+def test_trimmed_history_keeps_last_turns_without_tool_chatter():
+    from langchain_core.messages import ToolMessage
+
+    from jarvis.graph import trimmed_history
+
+    msgs = []
+    for i in range(5):
+        msgs += [HumanMessage(f"q{i}"), call("calculator", {"expression": "1"}, id=f"c{i}"),
+                 ToolMessage("1", tool_call_id=f"c{i}", name="calculator"), AIMessage(f"a{i} [1]")]
+    msgs.append(HumanMessage("now"))
+    got = [m.content for m in trimmed_history(msgs, turns=2)]
+    assert got == ["q3", "a3", "q4", "a4", "now"]
+
+
+async def test_empty_final_reply_gets_fallback():
+    out = await graph(fake(AIMessage(""))).ainvoke({"messages": [HumanMessage("x")]}, cfg)
+    assert out["messages"][-1].content.startswith("Sorry, I couldn't complete that")
+
+
+async def test_next_agent_sees_findings_not_other_agents_tool_calls():
+    from langchain_core.messages import ToolMessage
+
+    model = fake(call("calculator", {"expression": "2+2"}), AIMessage("note"), AIMessage("final"))
+    await graph(model, "assistant", "tasks").ainvoke({"messages": [HumanMessage("x")]}, cfg)
+    seen_by_tasks = model.seen[2]
+    assert not any(isinstance(m, ToolMessage) for m in seen_by_tasks)
+    assert not any(getattr(m, "tool_calls", None) for m in seen_by_tasks)
+    assert any("Findings from the assistant agent:\n4" in str(m.content) for m in seen_by_tasks)

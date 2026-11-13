@@ -85,7 +85,8 @@ def check(case: dict, run: dict) -> list[str]:
 
 
 async def run_case(graph, case: dict, idx: int) -> dict:
-    cfg = {"configurable": {"thread_id": f"eval-{idx}-{case['id']}"}}
+    # Cases with the same `thread` share one conversation (multi-turn); others get their own.
+    cfg = {"configurable": {"thread_id": f"eval-{case.get('thread') or f'{idx}-' + case['id']}"}}
     decision = {"approved": case.get("decide") == "approve"}
     approvals, t0 = [], time.perf_counter()
     try:

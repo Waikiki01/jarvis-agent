@@ -11,8 +11,9 @@
 - tools    runs tool calls. Actions in `approval_tools` pause the graph with
            interrupt() until the user approves or rejects (human-in-the-loop)
 - advance  moves to the next specialist, or on to verify
-- verify   if the reply claims an action happened but no action tool succeeded this
-           turn, the reply is replaced with the truth (enforced in code, not prompt)
+- verify   enforced in code, not prompt: citations must point at passages retrieved
+           this turn, and a claimed action must be confirmed by a successful action tool;
+           otherwise the reply is replaced with the truth
 """
 import asyncio
 import re
@@ -28,6 +29,9 @@ from .tools import TOOLS
 
 REFUSAL_REPLY = "Sorry, I can't help with that request."
 MAX_TOOL_ROUNDS = 6  # per specialist, stops tool-call loops
+HISTORY_TURNS = 3    # earlier exchanges each specialist sees
+_CITE = re.compile(r"\[(\d+)\]")
+NOT_FOUND_REPLY = "I couldn't find that in your knowledge base."
 _CLAIM = re.compile(
     r"\b(added|created|marked|completed|saved|deleted|removed|updated|scheduled)\b", re.I)
 
@@ -70,6 +74,34 @@ def current_turn(messages: list) -> list:
         if isinstance(messages[i], HumanMessage):
             return messages[i + 1:]
     return list(messages)
+
+
+def trimmed_history(messages: list, turns: int = HISTORY_TURNS) -> list:
+    """Earlier turns as (question, final answer) pairs only - no tool chatter, no [n]
+    markers - plus everything from the current turn. Found in a live demo: with the full
+    history a 7B model copied old citations into answers it had no passages for, and lost
+    track of the current request."""
+    start = max((i for i, m in enumerate(messages) if isinstance(m, HumanMessage)), default=0)
+    pairs, question, answer = [], None, None
+    for m in messages[:start]:
+        if isinstance(m, HumanMessage):
+            if question is not None and answer is not None:
+                pairs.append((question, answer))
+            question, answer = m, None
+        elif isinstance(m, AIMessage) and not m.tool_calls and text_of(m.content).strip():
+            answer = AIMessage(_CITE.sub("", text_of(m.content)).strip())
+    if question is not None and answer is not None:
+        pairs.append((question, answer))
+    return [m for pair in pairs[-turns:] for m in pair] + list(messages[start:])
+
+
+def own_view(messages: list, own_tools: set[str]) -> list:
+    """Hide other specialists' tool calls/results; their work arrives as the "Findings"
+    note. Live runs: a tasks agent that saw research's read_text_file calls claimed
+    success without calling add_task."""
+    return [m for m in messages
+            if not (isinstance(m, AIMessage) and m.tool_calls and {t["name"] for t in m.tool_calls} - own_tools)
+            and not (isinstance(m, ToolMessage) and m.name not in own_tools)]
 
 
 def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = "",
@@ -125,7 +157,12 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
         if state.get("context"):
             system += ("\n\nPassages from the user's knowledge base that may answer the "
                        "latest question (cite as [n]):\n\n" + state["context"])
-        reply = await bound[name].ainvoke([SystemMessage(system), *state["messages"]])
+        elif spec.uses_rag:
+            system += ("\n\nNo passages in the user's knowledge base match the latest question. "
+                       "If it asks about the user's own life, data or plans, say you couldn't "
+                       "find it. Do not use citations.")
+        own = {t.name for t in specialists[name][1]}
+        reply = await bound[name].ainvoke([SystemMessage(system), *own_view(trimmed_history(state["messages"]), own)])
         if (reply.response_metadata or {}).get("stop_reason") == "refusal":
             reply = AIMessage(REFUSAL_REPLY)
         return {"messages": [reply], "rounds": state.get("rounds", 0) + 1}
@@ -155,8 +192,9 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
             need = PRECONDITIONS.get(tc["name"])
             if need and need not in lookups and need in by_name:
                 listing = text_of(await by_name[need].ainvoke({}))
-                blocked[tc["id"]] = (f"error: look up the right number first - do not guess. "
-                                     f"Result of {need}:\n{listing}")
+                blocked[tc["id"]] = (f"error: not run - the number was guessed. Call {tc['name']} again "
+                                     f"now with the number of the matching task below (do not reply "
+                                     f"to the user first). Result of {need}:\n{listing}")
         approved = {}
         for tc in calls:
             if tc["name"] in action_tools and tc["name"] in allowed and tc["id"] not in blocked:
@@ -186,11 +224,12 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
         step, plan = state.get("step", 0), state.get("plan") or []
         updates: dict = {"step": step + 1}
         last = state["messages"][-1]
-        if (step < len(plan) - 1 and isinstance(last, AIMessage) and not last.tool_calls
-                and not text_of(last.content).strip()):
-            # Empty hand-off note: pass on what this agent's tools found instead.
+        if step < len(plan) - 1 and isinstance(last, AIMessage) and not last.tool_calls:
+            # Hand-off = this agent's raw tool results, not its prose. Live runs showed the
+            # 7B model's hand-off notes were empty, or a question back to the user ("Shall I
+            # add...?"), which left the next agent with nothing to act on.
             found = [str(m.content) for m in current_turn(state["messages"]) if isinstance(m, ToolMessage)]
-            note = found[-1][:2000] if found else "nothing found"
+            note = found[-1][:2000] if found else (text_of(last.content).strip() or "nothing found")
             updates["messages"] = [AIMessage(f"Findings from the {plan[step]} agent:\n{note}", id=last.id)]
         if getattr(last, "tool_calls", None):  # hit MAX_TOOL_ROUNDS with calls pending
             updates["messages"] = [
@@ -206,7 +245,19 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
     def verify(state: State):
         turn = current_turn(state["messages"])
         final = next((m for m in reversed(turn) if isinstance(m, AIMessage) and not m.tool_calls), None)
-        if final is None or not _CLAIM.search(text_of(final.content)):
+        if final is None:
+            return {}
+        if not text_of(final.content).strip():
+            return {"messages": [AIMessage("Sorry, I couldn't complete that - please try rephrasing.",
+                                           id=final.id)]}
+        # 1) Citations must point at passages actually retrieved for this turn.
+        cited = {int(n) for n in _CITE.findall(text_of(final.content))}
+        if cited:
+            available = len(re.findall(r"^\[\d+\] \(source:", state.get("context") or "", re.M))
+            if not available or max(cited) > available:
+                return {"messages": [AIMessage(NOT_FOUND_REPLY, id=final.id)]}
+        # 2) Claimed actions must be confirmed by a successful action tool.
+        if not _CLAIM.search(text_of(final.content)):
             return {}
         if not any(SPECIALISTS[p].tools and set(SPECIALISTS[p].tools) & action_tools
                    for p in state.get("plan") or []):
@@ -215,8 +266,13 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
         if any(not str(m.content).startswith("error") for m in results):
             return {}
         errors = [str(m.content) for m in results]
-        truth = ("I couldn't complete that: " + errors[-1].removeprefix("error: ")
-                 if errors else "I didn't actually perform that action - no change was made.")
+        if errors and "Result of list_tasks:\n" in errors[-1]:
+            listing = errors[-1].split("Result of list_tasks:\n", 1)[1]
+            truth = f"I didn't change anything yet. Your open tasks are:\n{listing}\nWhich one do you mean?"
+        elif errors:
+            truth = "I couldn't complete that: " + errors[-1].removeprefix("error: ")
+        else:
+            truth = "I didn't actually perform that action - no change was made."
         return {"messages": [AIMessage(truth, id=final.id)]}  # same id = replace
 
     g = StateGraph(State)
