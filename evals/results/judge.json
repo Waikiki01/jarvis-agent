@@ -1,0 +1,109 @@
+[
+  {
+    "id": "rag-printer-ip",
+    "faithful": true,
+    "claims": 1,
+    "unsupported": [],
+    "reply": "According to my notes, your printer (Brother HL-L2350DW) uses the IP address 192.168.0.20 [1]."
+  },
+  {
+    "id": "rag-nas-backup",
+    "faithful": true,
+    "claims": 1,
+    "unsupported": [],
+    "reply": "According to the notes, your NAS backups run every night at 02:00 [1]."
+  },
+  {
+    "id": "rag-ha-port",
+    "faithful": true,
+    "claims": 1,
+    "unsupported": [],
+    "reply": "Home Assistant is running on port 8123 [1]."
+  },
+  {
+    "id": "rag-guest-wifi",
+    "faithful": true,
+    "claims": 1,
+    "unsupported": [],
+    "reply": "The name of your guest Wi-Fi network is \"Rumah-Guest\" [1]."
+  },
+  {
+    "id": "rag-flight",
+    "faithful": true,
+    "claims": 6,
+    "unsupported": [],
+    "reply": "According to the Japan Trip Plan (March 2027), you will take flight MH70 departing from Kuala Lumpur (KLIA) on 18 March 2027 at 23:30, arriving in Osaka Kansai at 07:05 [1]."
+  },
+  {
+    "id": "rag-teamlab",
+    "faithful": true,
+    "claims": 2,
+    "unsupported": [],
+    "reply": "According to the passage [1], your TeamLab Planets booking is for 15:00 on 27 March [1]."
+  },
+  {
+    "id": "rag-budget",
+    "faithful": true,
+    "claims": 1,
+    "unsupported": [],
+    "reply": "[1] The total budget for the Japan trip in March 2027 is RM 12,000 for two people."
+  },
+  {
+    "id": "rag-osaka-hotel",
+    "faithful": true,
+    "claims": 1,
+    "unsupported": [],
+    "reply": "According to the itinerary for your Japan Trip Plan [1], you are staying at Hotel Cross Osaka in Namba during your visit to Osaka."
+  },
+  {
+    "id": "rag-next-service",
+    "faithful": true,
+    "claims": 3,
+    "unsupported": [],
+    "reply": "According to your car maintenance log for the Honda City 2021, the next service is due at 40,000 km or April 2027, whichever comes first [1]."
+  },
+  {
+    "id": "rag-insurance-date",
+    "faithful": false,
+    "claims": 3,
+    "unsupported": [
+      "The car is a Honda City 2021"
+    ],
+    "reply": "Your car insurance for the Honda City 2021 renews every 15 June with Etiqa [1]."
+  },
+  {
+    "id": "rag-tyres",
+    "faithful": true,
+    "claims": 3,
+    "unsupported": [],
+    "reply": "According to the car maintenance log for your Honda City 2021, the tyres are Michelin Primacy 4, size 185/55 R16, and they were replaced in August 2026 [1]."
+  },
+  {
+    "id": "rag-30k-cost",
+    "faithful": true,
+    "claims": 1,
+    "unsupported": [],
+    "reply": "The 30,000 km service cost RM 690 [1].\n\n[1] (source: samples/car_maintenance.md #0)"
+  },
+  {
+    "id": "conv-1-printer",
+    "faithful": true,
+    "claims": 1,
+    "unsupported": [],
+    "reply": "According to my notes, your printer (Brother HL-L2350DW) uses the IP address 192.168.0.20 [1]."
+  },
+  {
+    "id": "conv-2-service",
+    "faithful": true,
+    "claims": 3,
+    "unsupported": [],
+    "reply": "[1] Your next car service for the Honda City 2021 is due at 40,000 km or April 2027, whichever comes first. The service centre is in Glenmarie, Shah Alam, and the advisor is Encik Hafiz."
+  },
+  {
+    "id": "conv-3-birthday",
+    "faithful": true,
+    "claims": 0,
+    "unsupported": [],
+    "reply": "I couldn't find this information in my notes or documents."
+  }
+]

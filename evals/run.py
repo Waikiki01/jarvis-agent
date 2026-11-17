@@ -6,7 +6,8 @@
 
 Uses a fresh `jarvis_eval` database (sample docs ingested, empty task list), the real
 LLM from settings, the real MCP servers, and the same graph the API serves (runtime.py).
-Deterministic checks only - no LLM grades another LLM, so scores are reproducible.
+Deterministic checks only - no LLM grades another LLM, so scores are reproducible
+(evals/judge.py adds an LLM-judge faithfulness spot check, report only).
 Exit code 1 if a threshold in golden.yaml is missed (usable as a gate).
 """
 import argparse
@@ -108,6 +109,7 @@ async def run_case(graph, case: dict, idx: int) -> dict:
         out, reply, tools, error = {}, "", [], repr(e)
     return {"id": case["id"], "category": case["category"], "q": case["q"], "reply": reply,
             "agents": out.get("plan", []), "approvals": approvals, "tools": tools,
+            "context": out.get("context", ""),  # passages given to the final agent (for judge.py)
             "seconds": round(time.perf_counter() - t0, 2), "error": error}
 
 

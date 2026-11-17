@@ -55,6 +55,30 @@ def _task_line(listing: str, task_id) -> str | None:
     return next((ln for ln in listing.splitlines() if ln.startswith(f"#{task_id} ")), None)
 
 
+_TASK_LINE = re.compile(r"^#(\d+) ([^|]+)")
+_FILLER = {"the", "and", "for", "task", "tasks", "mark", "done", "complete", "completed", "finish",
+           "finished", "as", "my", "that", "this", "one", "please", "todo", "item"}
+
+
+def _words(text: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if len(w) >= 3 and w not in _FILLER}
+
+
+def resolve_task(request: str, listing: str) -> int | None:
+    """The task the user named, if exactly one open task matches their words best.
+
+    Small models often guess a task number instead of retrying after the lookup; matching
+    in code turns that into a normal approval request. Ambiguous or no match -> None, and
+    the model (and then the user) has to pick."""
+    wanted, scores = _words(request), {}
+    for line in listing.splitlines():
+        if (m := _TASK_LINE.match(line)) and "| done" not in line:
+            scores[int(m[1])] = len(wanted & _words(m[2]))
+    best = max(scores.values(), default=0)
+    winners = [tid for tid, sc in scores.items() if sc == best]
+    return winners[0] if best and len(winners) == 1 else None
+
+
 class State(MessagesState):
     plan: list[str]   # specialists for this turn, in order
     step: int         # index into plan
@@ -188,10 +212,17 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
                     if marker in str(m.content):
                         lookups[need] = str(m.content).split(marker, 1)[1]
         blocked = {}  # tool_call id -> result text, for unmet preconditions
+        calls = [dict(tc) for tc in calls]
         for tc in calls:
             need = PRECONDITIONS.get(tc["name"])
             if need and need not in lookups and need in by_name:
                 listing = text_of(await by_name[need].ainvoke({}))
+                # Deterministic on resume too: the lookup is read-only and returns the same list.
+                if tc["name"] == "complete_task" and (tid := resolve_task(current_turn_user(state["messages"]),
+                                                                          listing)):
+                    tc["args"] = {**tc["args"], "task_id": tid}
+                    lookups[need] = listing
+                    continue
                 blocked[tc["id"]] = (f"error: not run - the number was guessed. Call {tc['name']} again "
                                      f"now with the number of the matching task below (do not reply "
                                      f"to the user first). Result of {need}:\n{listing}")

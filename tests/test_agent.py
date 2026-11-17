@@ -285,16 +285,38 @@ async def test_complete_requires_lookup_and_approval_shows_title():
         """Complete a task (test double)."""
         return f"completed #{task_id}"
 
-    ADDED.extend(["#1 Renew passport | high priority", "#3 Buy milk"])
-    model = fake(call("complete_task", {"task_id": 3}, id="a"),      # guesses without looking
-                 call("complete_task", {"task_id": 1}, id="b"),      # retries after the listing
-                 AIMessage("Completed the passport task."))
-    g = graph(model, "tasks", tools=[*ALL_TOOLS, complete_task], approval_tools={"complete_task"})
+    ADDED.extend(["#1 Renew passport | high priority", "#3 Buy milk", "#4 Buy eggs"])
+    tools = [*ALL_TOOLS, complete_task]
+
+    # Guessed number, but the request names exactly one task: resolved in code, user approves it.
+    model = fake(call("complete_task", {"task_id": 3}, id="a"), AIMessage("Completed the passport task."))
+    g = graph(model, "tasks", tools=tools, approval_tools={"complete_task"})
     out = await g.ainvoke({"messages": [HumanMessage("mark the passport task done")]}, cfg)
+    pending = out["__interrupt__"][0].value
+    assert pending["args"]["task_id"] == 1 and pending["target"] == "#1 Renew passport | high priority"
+    out = await g.ainvoke(Command(resume={"approved": True}), cfg)
+    assert [m.content for m in out["messages"] if getattr(m, "tool_call_id", None) == "a"] == ["completed #1"]
+
+    # Ambiguous ("buy" matches two tasks): still blocked, model must pick from the listing.
+    model = fake(call("complete_task", {"task_id": 9}, id="a"),
+                 call("complete_task", {"task_id": 4}, id="b"), AIMessage("ok"))
+    g = graph(model, "tasks", tools=tools, approval_tools={"complete_task"})
+    out = await g.ainvoke({"messages": [HumanMessage("mark the buy task done")]}, cfg)
     first = [m for m in out["messages"] if getattr(m, "tool_call_id", None) == "a"][0]
-    assert first.content.startswith("error: not run - the number was guessed")
-    assert "#1 Renew passport" in first.content
-    assert out["__interrupt__"][0].value["target"] == "#1 Renew passport | high priority"
+    assert first.content.startswith("error: not run - the number was guessed") and "#4 Buy eggs" in first.content
+    assert out["__interrupt__"][0].value["target"] == "#4 Buy eggs"
+
+
+def test_resolve_task():
+    from jarvis.graph import resolve_task
+
+    listing = "#2 Buy dish soap\n#5 Water the plants | due 2026-11-20\n#7 Buy eggs | done"
+    assert resolve_task("Mark the dish soap task as done.", listing) == 2
+    assert resolve_task("I watered the plants", listing) == 5
+    assert resolve_task("mark the passport task done", listing) is None   # no such task
+    assert resolve_task("finish the plants one", listing) == 5
+    assert resolve_task("mark eggs done", listing) is None             # already done
+    assert resolve_task("mark it done", listing) is None
 
 
 def test_ui_is_served():
