@@ -1,12 +1,16 @@
 """Settings, read from environment variables or a .env file."""
 from functools import lru_cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
+
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_prefix="JARVIS_", extra="ignore")
+    # .env is found from the repo root, whatever directory the app is started from.
+    model_config = SettingsConfigDict(env_file=ENV_FILE, env_prefix="JARVIS_", extra="ignore")
 
     # Which LLM to use: "ollama" (local, free, offline - default) or "anthropic" (Claude API, paid).
     llm_provider: Literal["anthropic", "ollama"] = "ollama"

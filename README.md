@@ -51,7 +51,8 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 ollama pull qwen2.5:7b-instruct  # local LLM (free)
 cp .env.example .env            # optional: switch provider / enable Postgres
 docker compose up -d            # optional: Postgres + pgvector for persistent memory
-cd src && ../.venv/bin/uvicorn jarvis.api:app --reload
+.venv/bin/uvicorn jarvis.api:app --app-dir src --reload --reload-dir src
+# Windows: tools/start-jarvis.sh is a one-click launcher (see "Desktop launcher" below)
 # open http://localhost:8000  (the orb UI)
 ```
 
@@ -63,6 +64,18 @@ curl -s -X POST localhost:8000/chat -H 'content-type: application/json' \
 
 WebSocket `/ws`: send `{"message": "...", "thread_id": "..."}`; receive
 `token`, `tool_call`, `tool_result`, `done` or `error` events.
+
+### Desktop launcher (Windows + WSL)
+
+`tools/start-jarvis.sh` starts Postgres, then the server, and opens the UI in the Windows
+browser once `/health` answers (if Jarvis is already running it just opens the browser).
+Make a desktop shortcut whose target is:
+
+```
+C:\Windows\System32\wsl.exe -d Ubuntu-24.04 --cd /home/<you>/work/jarvis-agent -- bash -l tools/start-jarvis.sh
+```
+
+Closing the window stops the server.
 
 ## Knowledge base (RAG)
 
