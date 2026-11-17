@@ -16,6 +16,7 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langgraph.types import Command
@@ -205,6 +206,10 @@ def create_app(model=None, router: Router | None = None) -> FastAPI:
                     await socket.send_json({"type": "error", "message": str(e)})
         except WebSocketDisconnect:
             pass
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon():  # browsers ask for /favicon.ico even when the page names another icon
+        return FileResponse(Path(__file__).parent / "ui" / "favicon.svg", media_type="image/svg+xml")
 
     # The orb UI (static files). Mounted last so the API routes above take precedence.
     app.mount("/", StaticFiles(directory=Path(__file__).parent / "ui", html=True), name="ui")

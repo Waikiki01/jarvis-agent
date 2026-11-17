@@ -329,6 +329,7 @@ def test_ui_is_served():
         page = client.get("/")
         assert page.status_code == 200 and "<canvas id=\"orb\"" in page.text
         assert client.get("/app.js").status_code == 200
+        assert client.get("/favicon.ico").headers["content-type"] == "image/svg+xml"
         assert client.get("/health").json()["ok"] is True   # API still wins over the static mount
 
 
