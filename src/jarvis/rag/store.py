@@ -4,6 +4,8 @@ Hybrid search: run a vector search (meaning) and a full-text search (exact words
 numbers) separately, then merge the two rankings with Reciprocal Rank Fusion (RRF):
     score = 1/(60 + rank_vector) + 1/(60 + rank_text)
 RRF needs no score normalisation, which is why it is the common default.
+
+Every document has an `owner`; search only ever sees the caller's documents (filtered in SQL).
 """
 import hashlib
 import json
@@ -19,7 +21,7 @@ SCHEMA = """
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE TABLE IF NOT EXISTS documents (
     id          bigserial PRIMARY KEY,
-    source      text UNIQUE NOT NULL,
+    source      text NOT NULL,
     title       text NOT NULL,
     sha256      text NOT NULL,
     ingested_at timestamptz NOT NULL DEFAULT now()
@@ -35,16 +37,22 @@ CREATE TABLE IF NOT EXISTS chunks (
 );
 CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw ON chunks USING hnsw (embedding vector_cosine_ops);
 CREATE INDEX IF NOT EXISTS chunks_tsv_gin ON chunks USING gin (tsv);
+-- multi-user (added after step 5; also migrates older databases)
+ALTER TABLE documents ADD COLUMN IF NOT EXISTS owner text NOT NULL DEFAULT 'local';
+ALTER TABLE documents DROP CONSTRAINT IF EXISTS documents_source_key;
+CREATE UNIQUE INDEX IF NOT EXISTS documents_owner_source ON documents (owner, source);
 """
 
 HYBRID_SQL = """
 WITH vec AS (
-    SELECT id, row_number() OVER (ORDER BY embedding <=> %(qvec)s) AS r
-    FROM chunks ORDER BY embedding <=> %(qvec)s LIMIT %(k)s
+    SELECT c.id, row_number() OVER (ORDER BY c.embedding <=> %(qvec)s) AS r
+    FROM chunks c JOIN documents d ON d.id = c.document_id
+    WHERE d.owner = %(owner)s
+    ORDER BY c.embedding <=> %(qvec)s LIMIT %(k)s
 ), txt AS (
     SELECT c.id, row_number() OVER (ORDER BY ts_rank_cd(c.tsv, q) DESC) AS r
-    FROM chunks c, websearch_to_tsquery('english', %(qtext)s) q
-    WHERE c.tsv @@ q ORDER BY ts_rank_cd(c.tsv, q) DESC LIMIT %(k)s
+    FROM chunks c JOIN documents d ON d.id = c.document_id, websearch_to_tsquery('english', %(qtext)s) q
+    WHERE c.tsv @@ q AND d.owner = %(owner)s ORDER BY ts_rank_cd(c.tsv, q) DESC LIMIT %(k)s
 )
 SELECT c.id, c.content, c.metadata, c.chunk_index, d.source, d.title,
        COALESCE(1.0 / (60 + vec.r), 0) + COALESCE(1.0 / (60 + txt.r), 0) AS score,
@@ -89,15 +97,15 @@ class VectorStore:
             conn.execute(SCHEMA.format(dim=self.dim))
 
     def upsert_document(self, source: str, title: str, text_hash: str,
-                        chunks: list[Chunk], embeddings: list[list[float]]) -> None:
+                        chunks: list[Chunk], embeddings: list[list[float]], owner: str = "local") -> None:
         """Replace a document and its chunks in one transaction."""
         import numpy as np
 
         with self.connect() as conn, conn.transaction():
-            conn.execute("DELETE FROM documents WHERE source = %s", (source,))
+            conn.execute("DELETE FROM documents WHERE source = %s AND owner = %s", (source, owner))
             doc_id = conn.execute(
-                "INSERT INTO documents (source, title, sha256) VALUES (%s, %s, %s) RETURNING id",
-                (source, title, text_hash)).fetchone()[0]
+                "INSERT INTO documents (source, title, sha256, owner) VALUES (%s, %s, %s, %s) RETURNING id",
+                (source, title, text_hash, owner)).fetchone()[0]
             with conn.cursor() as cur:
                 cur.executemany(
                     "INSERT INTO chunks (document_id, chunk_index, content, metadata, embedding)"
@@ -105,12 +113,14 @@ class VectorStore:
                     [(doc_id, c.index, c.content, json.dumps(c.metadata), np.array(e))
                      for c, e in zip(chunks, embeddings, strict=True)])
 
-    def document_hash(self, source: str) -> str | None:
+    def document_hash(self, source: str, owner: str = "local") -> str | None:
         with self.connect() as conn:
-            row = conn.execute("SELECT sha256 FROM documents WHERE source = %s", (source,)).fetchone()
+            row = conn.execute("SELECT sha256 FROM documents WHERE source = %s AND owner = %s",
+                               (source, owner)).fetchone()
             return row[0] if row else None
 
-    def hybrid_search(self, qvec: list[float], qtext: str, k: int = 20, n: int = 10) -> list[Hit]:
+    def hybrid_search(self, qvec: list[float], qtext: str, k: int = 20, n: int = 10,
+                      owner: str = "local") -> list[Hit]:
         import numpy as np
 
         # OR the words: websearch_to_tsquery ANDs them by default, so a question with one
@@ -119,7 +129,14 @@ class VectorStore:
         qtext = " or ".join(re.findall(r"\w+", qtext)) or qtext
 
         with self.connect() as conn:
-            rows = conn.execute(HYBRID_SQL, {"qvec": np.array(qvec), "qtext": qtext, "k": k, "n": n}).fetchall()
+            # With the owner filter, a plain HNSW scan could stop short of k rows when other
+            # users own most near neighbours; iterative scans (pgvector >= 0.8) keep going.
+            try:
+                conn.execute("SET hnsw.iterative_scan = relaxed_order")
+            except psycopg.Error:
+                pass
+            rows = conn.execute(HYBRID_SQL, {"qvec": np.array(qvec), "qtext": qtext, "k": k, "n": n,
+                                             "owner": owner}).fetchall()
         return [Hit(id=r[0], content=r[1], metadata=r[2], chunk_index=r[3], source=r[4],
                     title=r[5], score=float(r[6]), vec_rank=r[7], txt_rank=r[8]) for r in rows]
 

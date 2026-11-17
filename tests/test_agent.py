@@ -191,8 +191,9 @@ class FakeRetriever:
     def __init__(self, hits):
         self.hits, self.queries = hits, []
 
-    def search(self, q):
+    def search(self, q, owner="local"):
         self.queries.append(q)
+        self.owners = [*getattr(self, "owners", []), owner]
         return self.hits
 
 
@@ -296,6 +297,9 @@ async def test_complete_requires_lookup_and_approval_shows_title():
     assert pending["args"]["task_id"] == 1 and pending["target"] == "#1 Renew passport | high priority"
     out = await g.ainvoke(Command(resume={"approved": True}), cfg)
     assert [m.content for m in out["messages"] if getattr(m, "tool_call_id", None) == "a"] == ["completed #1"]
+    # The model's own history now shows the resolved call, not its guess.
+    calls = [tc for m in out["messages"] if isinstance(m, AIMessage) for tc in m.tool_calls]
+    assert [(c["id"], c["args"]["task_id"]) for c in calls] == [("a", 1)]
 
     # Ambiguous ("buy" matches two tasks): still blocked, model must pick from the listing.
     model = fake(call("complete_task", {"task_id": 9}, id="a"),

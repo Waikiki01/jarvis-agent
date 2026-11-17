@@ -40,7 +40,7 @@ def current_time() -> str:
 
 
 @tool
-def search_knowledge(query: str) -> str:
+def search_knowledge(query: str, owner: str = "local") -> str:
     """Search the user's personal knowledge base (their notes, documents and PDFs).
 
     Use for any question about the user's own plans, notes, policies or records.
@@ -49,7 +49,7 @@ def search_knowledge(query: str) -> str:
     from .rag import format_hits, get_retriever
 
     try:
-        return format_hits(get_retriever().search(query))
+        return format_hits(get_retriever().search(query, owner))
     except Exception as e:  # e.g. database down: tell the model instead of crashing
         return f"error: knowledge base unavailable ({e})"
 

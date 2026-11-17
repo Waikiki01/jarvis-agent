@@ -21,15 +21,14 @@ from notes, an honest "couldn't find it", a research → tasks hand-off with app
 ## Architecture
 
 ```
-UI (orb + voice)
+UI (orb + push-to-talk voice, offline Whisper speech-to-text)
    │ WebSocket: streamed tokens + agent events
-FastAPI gateway
+FastAPI gateway ── optional per-user tokens (conversations, tasks, notes, files kept apart)
    │
-LangGraph supervisor ── Postgres checkpointer (memory, human approval)
-   ├─ Knowledge agent ── RAG: hybrid search (pgvector + full-text) → rerank → cited answer
-   ├─ Research agent  ── MCP client → web / GitHub / filesystem MCP servers
-   ├─ Action agent    ── MCP client → own MCP server (notes, tasks, calendar)
-   └─ Long-term memory ── user facts in pgvector
+LangGraph supervisor ── Postgres checkpointer (conversation memory, human approval)
+   ├─ assistant agent ── RAG: hybrid search (pgvector + full-text) → rerank → cited answer
+   ├─ research agent  ── MCP client → filesystem (sandbox) + fetch MCP servers
+   └─ tasks agent     ── MCP client → own tasks MCP server (Postgres)
 Phoenix tracing (OpenTelemetry) · golden-set evals with a CI-style gate · Docker Compose · GitHub Actions
 ```
 
@@ -43,6 +42,7 @@ Phoenix tracing (OpenTelemetry) · golden-set evals with a CI-style gate · Dock
 | 4 | Multi-agent supervisor + human-in-the-loop approval | ✅ |
 | 5 | Evals (golden set, retrieval metrics, gate) + Phoenix tracing + CI | ✅ |
 | 6 | Orb/voice UI, demo video | ✅ |
+| 7 | Offline speech-to-text, multi-user auth + data isolation, LLM-judge spot check | ✅ |
 
 ## Quick start
 
@@ -169,6 +169,34 @@ Found in live testing (7B local model) and fixed:
 | LLM router sent "what is my printer IP?" to `research` (15 s, wrong) | No keyword → `assistant` directly (3 s, correct) |
 | Research agent used relative paths; filesystem server needs absolute | Sandbox path injected into its prompt |
 | Two-step reply presented the shopping list as the to-do list | Hand-off notes hidden; final agent answers only from tool results |
+
+## Multi-user: auth + per-user data
+
+Off by default (one user, `local`: the launcher, Claude Desktop and the evals use it). To turn on:
+
+```bash
+echo JARVIS_AUTH_ENABLED=true >> .env
+python -m jarvis.users add alice            # prints alice's token once (only its SHA-256 is stored)
+python -m jarvis.rag.ingest alice_notes/ --owner alice
+```
+
+The UI asks for the token once; REST calls send `Authorization: Bearer <token>`; the WebSocket's
+first message carries it (not the URL, which would land in access logs).
+
+| Data | How it is kept apart |
+|---|---|
+| Conversations | checkpointer thread ids are namespaced `user:thread` |
+| Tasks | `owner` column; every MCP tool filters on it |
+| Knowledge base | `owner` on documents; hybrid search filters in SQL (pgvector iterative scan, so the filter can't starve the HNSW results) |
+| Sandbox files | `sandbox/users/<id>/`; paths resolved (`..`, symlinks) and checked in code before the filesystem tool runs |
+
+The key design point: **the model never chooses whose data it touches.** Tools with an `owner`
+argument get it removed from the schema (and description) the model sees, and the graph writes
+the signed-in user into it before every call, overwriting anything the model sent. Found by the
+evals: with `owner` still mentioned in a docstring, the 7B model started passing `"owner": "user"`.
+Tested at every layer, including a live run where bob can neither see nor complete alice's task.
+Limits: task numbers are global (ids reveal a count), and the tasks MCP server trusts its client,
+as a stdio server spawned by that client does; isolation is enforced by the Jarvis gateway.
 
 ## Evals
 

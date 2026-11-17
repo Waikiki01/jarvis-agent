@@ -14,13 +14,22 @@
 - verify   enforced in code, not prompt: citations must point at passages retrieved
            this turn, and a claimed action must be confirmed by a successful action tool;
            otherwise the reply is replaced with the truth
+
+Multi-user: the user comes from the run config (`configurable.user`, set by the API after
+authentication; default "local"). Tools with an `owner` argument get it from there - the
+argument is removed from the schema the model sees, and overwritten before every call, so
+no prompt can reach another user's tasks or notes. File tools are confined to the user's
+sandbox folder by a path check in code.
 """
 import asyncio
+import os
 import re
 from datetime import date
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.runnables import RunnableConfig
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.types import interrupt
 
@@ -45,6 +54,56 @@ def _fetch_policy(args: dict) -> dict:
 
 # Tool-argument policies enforced in code (the model's arguments are not trusted blindly).
 ARG_POLICIES = {"fetch": _fetch_policy}
+
+USER_ARG = "owner"   # injected by the system on tools that have it; never chosen by the model
+LOCAL_USER = "local"
+FILE_TOOLS = {"read_text_file", "list_directory", "search_files"}
+
+
+def user_of(config: RunnableConfig | None) -> str:
+    return ((config or {}).get("configurable") or {}).get("user") or LOCAL_USER
+
+
+def _takes_user(t) -> bool:
+    return USER_ARG in (getattr(t, "args", None) or {})
+
+
+def model_view(t):
+    """The schema the model sees: without the system-set `owner` argument."""
+    if not _takes_user(t):
+        return t
+    schema = convert_to_openai_tool(t)
+    # Also drop any mention in the description: in a live eval the model read "owner: ..."
+    # from a docstring's Args section and started filling it in.
+    schema["function"]["description"] = re.sub(
+        rf"(?im)^\s*{USER_ARG}\b.*\n?", "", schema["function"].get("description", ""))
+    params = schema["function"]["parameters"]
+    params.get("properties", {}).pop(USER_ARG, None)
+    if USER_ARG in params.get("required", []):
+        params["required"] = [r for r in params["required"] if r != USER_ARG]
+    return schema
+
+
+def user_sandbox(root: str, user: str) -> str:
+    """'local' keeps the classic sandbox/ folder; other users get sandbox/users/<id>/."""
+    if user == LOCAL_USER:
+        return root
+    path = os.path.join(root, "users", user)
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
+def sandbox_path(path: str, root: str, user: str) -> str | None:
+    """Resolved path if it is inside the user's sandbox folder, else None. Symlinks and
+    '..' are resolved first; 'local' may not read other users' folders under sandbox/users."""
+    base = os.path.realpath(user_sandbox(root, user))
+    p = os.path.realpath(path if os.path.isabs(path) else os.path.join(base, path))
+    if p != base and not p.startswith(base + os.sep):
+        return None
+    users = os.path.realpath(os.path.join(root, "users"))
+    if user == LOCAL_USER and (p == users or p.startswith(users + os.sep)):
+        return None
+    return p
 
 # Preconditions: an action may only run after a lookup tool ran this turn. Stops the model
 # from guessing an id - and the user from approving "complete task #3" blind.
@@ -139,7 +198,15 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
         name: (spec, [by_name[t] for t in spec.tools if t in by_name])
         for name, spec in SPECIALISTS.items()
     }
-    bound = {name: (model.bind_tools(ts) if ts else model) for name, (_, ts) in specialists.items()}
+    bound = {name: (model.bind_tools([model_view(t) for t in ts]) if ts else model)
+             for name, (_, ts) in specialists.items()}
+
+    def with_user(name: str, args: dict, user: str) -> dict:
+        """Apply code-enforced argument rules: the system-set owner, then any policy."""
+        args = dict(args)
+        if _takes_user(by_name[name]):
+            args[USER_ARG] = user   # overwrites anything the model sent
+        return ARG_POLICIES.get(name, lambda a: a)(args)
     route = router or make_router(model)
     action_tools = set(approval_tools)
 
@@ -152,22 +219,23 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
         plan = [p for p in await route(last) if p in specialists] or [DEFAULT]
         return {"plan": plan, "step": 0}
 
-    async def prepare(state: State):
+    async def prepare(state: State, config: RunnableConfig):
         spec, _ = specialists[active(state)]
         context = ""
         if spec.uses_rag and retriever is not None:
             try:
-                hits = await asyncio.to_thread(retriever.search, current_turn_user(state["messages"]))
+                hits = await asyncio.to_thread(retriever.search, current_turn_user(state["messages"]),
+                                               user_of(config))
             except Exception:  # knowledge base down: answer without it
                 hits = []
             context = format_hits(hits) if hits else ""
         return {"context": context, "rounds": 0}
 
-    async def agent(state: State):
+    async def agent(state: State, config: RunnableConfig):
         name = active(state)
         spec, _ = specialists[name]
         system = (f"{system_prompt}\nToday is {date.today().isoformat()}.\n\n"
-                  + spec.prompt.replace("{sandbox}", sandbox_dir))
+                  + spec.prompt.replace("{sandbox}", user_sandbox(sandbox_dir, user_of(config))))
         plan, step = state.get("plan") or [DEFAULT], state.get("step", 0)
         if step < len(plan) - 1:
             system += (f"\n\nYou are step {step + 1} of {len(plan)}. The '{plan[step + 1]}' agent "
@@ -197,7 +265,8 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
             return "tools"
         return "advance"
 
-    async def tools_node(state: State):
+    async def tools_node(state: State, config: RunnableConfig):
+        user = user_of(config)
         calls = state["messages"][-1].tool_calls
         allowed = {t.name for t in specialists[active(state)][1]}
         # Ask for every approval BEFORE running anything: on resume LangGraph re-runs this
@@ -212,16 +281,19 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
                     if marker in str(m.content):
                         lookups[need] = str(m.content).split(marker, 1)[1]
         blocked = {}  # tool_call id -> result text, for unmet preconditions
+        last = state["messages"][-1]
         calls = [dict(tc) for tc in calls]
+        corrected = False
         for tc in calls:
             need = PRECONDITIONS.get(tc["name"])
             if need and need not in lookups and need in by_name:
-                listing = text_of(await by_name[need].ainvoke({}))
+                listing = text_of(await by_name[need].ainvoke(with_user(need, {}, user)))
                 # Deterministic on resume too: the lookup is read-only and returns the same list.
                 if tc["name"] == "complete_task" and (tid := resolve_task(current_turn_user(state["messages"]),
                                                                           listing)):
                     tc["args"] = {**tc["args"], "task_id": tid}
                     lookups[need] = listing
+                    corrected = True
                     continue
                 blocked[tc["id"]] = (f"error: not run - the number was guessed. Call {tc['name']} again "
                                      f"now with the number of the matching task below (do not reply "
@@ -229,7 +301,7 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
         approved = {}
         for tc in calls:
             if tc["name"] in action_tools and tc["name"] in allowed and tc["id"] not in blocked:
-                request = {"tool": tc["name"], "args": tc["args"]}
+                request = {"tool": tc["name"], "args": {k: v for k, v in tc["args"].items() if k != USER_ARG}}
                 if tc["name"] == "complete_task" and "list_tasks" in lookups:
                     request["target"] = _task_line(lookups["list_tasks"], tc["args"].get("task_id"))
                 decision = interrupt(request)
@@ -242,13 +314,26 @@ def build_graph(model: BaseChatModel, checkpointer=None, system_prompt: str = ""
                 result = blocked[tc["id"]]
             elif approved.get(tc["id"]) is False:
                 result = "error: the user rejected this action. Do not retry it."
+            elif tc["name"] in FILE_TOOLS and (
+                    "path" not in tc["args"] or sandbox_path(str(tc["args"]["path"]), sandbox_dir, user) is None):
+                result = (f"error: path is outside your sandbox folder {user_sandbox(sandbox_dir, user)}; "
+                          "use absolute paths inside it")
             else:
                 try:
-                    args = ARG_POLICIES.get(tc["name"], lambda a: a)(dict(tc["args"]))
+                    args = with_user(tc["name"], tc["args"], user)
+                    if tc["name"] in FILE_TOOLS:
+                        args["path"] = sandbox_path(str(args["path"]), sandbox_dir, user)
                     result = text_of(await by_name[tc["name"]].ainvoke(args))
                 except Exception as e:
                     result = f"error: {e}"
             out.append(ToolMessage(content=str(result), tool_call_id=tc["id"], name=tc["name"]))
+        if corrected:
+            # Rewrite the model's call with the resolved number (same id = replace), so its own
+            # history shows complete_task(1) -> "completed #1 ..." and it can't echo the guess.
+            # Live eval: reply said "Task #3 has been marked as done" after #1 was completed.
+            fixed = last.model_copy(update={"tool_calls": [
+                {"name": tc["name"], "args": tc["args"], "id": tc["id"], "type": "tool_call"} for tc in calls]})
+            out = [fixed, *out]
         return {"messages": out}
 
     def advance(state: State):

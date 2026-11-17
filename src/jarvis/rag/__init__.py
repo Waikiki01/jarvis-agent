@@ -17,9 +17,9 @@ class Retriever:
         self.rerank_model, self.candidates, self.top_n = rerank_model, candidates, top_n
         self.min_score = min_score
 
-    def search(self, query: str) -> list[Hit]:
+    def search(self, query: str, owner: str = "local") -> list[Hit]:
         hits = self.store.hybrid_search(self.embedder.embed_query(query), query,
-                                        k=self.candidates, n=self.candidates)
+                                        k=self.candidates, n=self.candidates, owner=owner)
         if self.rerank_model:
             ranked = rerank(query, hits, self.top_n, self.rerank_model)
             # Drop passages the cross-encoder judged irrelevant, so the LLM isn't

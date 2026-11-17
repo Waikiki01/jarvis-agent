@@ -2,6 +2,7 @@
 
     python -m jarvis.rag.ingest samples/           # a folder (md, txt, pdf)
     python -m jarvis.rag.ingest notes.pdf --force  # re-embed even if unchanged
+    python -m jarvis.rag.ingest alice_notes/ --owner alice   # another user's knowledge base
 
 Re-running is cheap: a file whose content hash is unchanged is skipped.
 """
@@ -15,13 +16,14 @@ from .embed import Embedder, get_embedder
 from .store import VectorStore, sha256
 
 
-def ingest_path(root: Path, store: VectorStore, embedder: Embedder, force: bool = False) -> dict:
+def ingest_path(root: Path, store: VectorStore, embedder: Embedder, force: bool = False,
+                owner: str = "local") -> dict:
     counts = {"ingested": 0, "skipped": 0, "chunks": 0}
     for path in iter_files(root):
         parts = load_text(path)
         digest = sha256("".join(t for t, _ in parts))
         source = str(path.resolve().relative_to(root.resolve().parent))
-        if not force and store.document_hash(source) == digest:
+        if not force and store.document_hash(source, owner) == digest:
             counts["skipped"] += 1
             continue
         title = path.stem.replace("_", " ").replace("-", " ")
@@ -29,7 +31,7 @@ def ingest_path(root: Path, store: VectorStore, embedder: Embedder, force: bool 
         if not chunks:
             continue
         vectors = embedder.embed_documents([c.content for c in chunks])
-        store.upsert_document(source, title, digest, chunks, vectors)
+        store.upsert_document(source, title, digest, chunks, vectors, owner)
         counts["ingested"] += 1
         counts["chunks"] += len(chunks)
         print(f"  + {source}: {len(chunks)} chunks")
@@ -40,6 +42,7 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("path", type=Path)
     ap.add_argument("--force", action="store_true")
+    ap.add_argument("--owner", default="local", help="user who owns these documents (default: local)")
     a = ap.parse_args(argv)
     s = get_settings()
     if not s.database_url:
@@ -47,7 +50,7 @@ def main(argv=None) -> int:
         return 2
     store = VectorStore(s.database_url, s.embed_dim)
     store.ensure_schema()
-    print(ingest_path(a.path, store, get_embedder(), a.force), "| totals:", store.stats())
+    print(ingest_path(a.path, store, get_embedder(), a.force, a.owner), "| totals:", store.stats())
     return 0
 
 

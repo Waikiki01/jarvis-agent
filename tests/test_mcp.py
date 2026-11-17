@@ -58,6 +58,15 @@ async def test_tasks_server_over_mcp(test_db):
 
         res = await s.read_resource("tasks://open")
         assert "Renew road tax" in res.contents[0].text
+
+        # per-user lists: alice's task is invisible to, and can't be completed by, others
+        added = text(await s.call_tool("add_task", {"title": "Alice only", "owner": "alice"}))
+        alice_id = int(added.split("#")[1].split()[0])
+        assert "Alice only" not in text(await s.call_tool("list_tasks", {"include_done": True}))
+        assert "Alice only" in text(await s.call_tool("list_tasks", {"owner": "alice"}))
+        assert text(await s.call_tool("complete_task", {"task_id": alice_id})).startswith("error")
+        assert text(await s.call_tool("complete_task", {"task_id": alice_id, "owner": "bob"})).startswith("error")
+        assert text(await s.call_tool("complete_task", {"task_id": alice_id, "owner": "alice"})).startswith("completed")
         prompt = await s.get_prompt("plan_my_day")
         assert "Renew road tax" in prompt.messages[0].content.text
 

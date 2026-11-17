@@ -54,6 +54,8 @@ async def build_runtime(stack: AsyncExitStack, settings: Settings,
         saver = await stack.enter_async_context(AsyncPostgresSaver.from_conn_string(settings.database_url))
         await saver.setup()
         VectorStore(settings.database_url, settings.embed_dim).ensure_schema()
+        from .users import ensure_schema as ensure_users
+        ensure_users(settings.database_url)
         retriever = get_retriever()
     else:
         saver, retriever = InMemorySaver(), None

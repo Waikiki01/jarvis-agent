@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # MCP servers to connect (JSON file, relative to the repo root). Empty = none.
     mcp_config: str = "mcp_servers.json"
 
+    # Multi-user: require a token per user (python -m jarvis.users add <id>). Needs the database.
+    # Off = a single user, "local" (the launcher, Claude Desktop and evals all use that).
+    auth_enabled: bool = False
+
     # Tools that pause for the user's approval before running (human-in-the-loop).
     approval_tools: list[str] = ["add_task", "complete_task"]
 

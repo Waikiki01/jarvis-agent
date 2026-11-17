@@ -15,7 +15,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 4.63,
+      "context": "[1] (source: samples/home_network.md #1)\n[Home Network Notes > Devices with fixed IPs]\n- NAS (Synology DS224+): 192.168.0.10, backups run every night at 02:00.\n- Printer (Brother HL-L2350DW): 192.168.0.20.\n- Home Assistant on a Raspberry Pi 5: 192.168.0.30, port 8123.",
+      "seconds": 1.04,
       "error": null,
       "fails": [],
       "passed": true
@@ -30,7 +31,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.72,
+      "context": "[1] (source: samples/home_network.md #1)\n[Home Network Notes > Devices with fixed IPs]\n- NAS (Synology DS224+): 192.168.0.10, backups run every night at 02:00.\n- Printer (Brother HL-L2350DW): 192.168.0.20.\n- Home Assistant on a Raspberry Pi 5: 192.168.0.30, port 8123.",
+      "seconds": 0.63,
       "error": null,
       "fails": [],
       "passed": true
@@ -45,7 +47,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.67,
+      "context": "[1] (source: samples/home_network.md #1)\n[Home Network Notes > Devices with fixed IPs]\n- NAS (Synology DS224+): 192.168.0.10, backups run every night at 02:00.\n- Printer (Brother HL-L2350DW): 192.168.0.20.\n- Home Assistant on a Raspberry Pi 5: 192.168.0.30, port 8123.",
+      "seconds": 0.6,
       "error": null,
       "fails": [],
       "passed": true
@@ -60,7 +63,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.98,
+      "context": "[1] (source: samples/home_network.md #0)\n[Home Network Notes > Router]\n- Router: TP-Link Archer AX55 in the living room. Admin page at http://192.168.0.1.\n- Firmware last updated on 2 October 2026.\n- The guest Wi-Fi network is called \"Rumah-Guest\" and is limited to 20 Mbps.",
+      "seconds": 0.94,
       "error": null,
       "fails": [],
       "passed": true
@@ -69,13 +73,14 @@
       "id": "rag-flight",
       "category": "rag",
       "q": "Which flight do we take to Osaka?",
-      "reply": "According to the Japan Trip Plan (March 2027), you will take flight MH70 departing from Kuala Lumpur (KLIA) on 18 March 2027 at 23:30, arriving in Osaka Kansai at 07:05 [1].",
+      "reply": "According to the Japan Trip Plan (March 2027), you will take flight MH70 departing from Kuala Lumpur (KLIA) on 18 March 2027 at 23:30, arriving in Osaka Kansai at 07:05 [1].\n\n[1] (source: samples/japan_trip_2027.md #0)",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.79,
+      "context": "[1] (source: samples/japan_trip_2027.md #0)\n[Japan Trip Plan (March 2027) > Dates and flights]\n- Depart Kuala Lumpur (KLIA) on 18 March 2027, flight MH70 at 23:30, arrive Osaka Kansai 07:05.\n- Return from Tokyo Haneda on 29 March 2027, flight MH89 at 10:30.\n\n[2] (source: samples/japan_trip_2027.md #1)\n[Japan Trip Plan (March 2027) > Itinerary]\n- 19-22 March: Osaka. Stay at Hotel Cross Osaka in Namba. Day trip to Nara on 21 March.\n- 22-25 March: Kyoto. Ryokan near Gion. Visit Fushimi Inari early (before 8 am) to avoid crowds.\n- 25-29 March: Tokyo. Apartment in Shibuya. TeamLab Planets booked for 27 March, 15:00.",
+      "seconds": 1.75,
       "error": null,
       "fails": [],
       "passed": true
@@ -84,13 +89,14 @@
       "id": "rag-teamlab",
       "category": "rag",
       "q": "What time is our TeamLab booking?",
-      "reply": "According to the passage [1], your TeamLab Planets booking is for 15:00 on 27 March [1].",
+      "reply": "According to the itinerary [1], your TeamLab Planets booking is for 15:00 on 27 March in Tokyo.",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.08,
+      "context": "[1] (source: samples/japan_trip_2027.md #1)\n[Japan Trip Plan (March 2027) > Itinerary]\n- 19-22 March: Osaka. Stay at Hotel Cross Osaka in Namba. Day trip to Nara on 21 March.\n- 22-25 March: Kyoto. Ryokan near Gion. Visit Fushimi Inari early (before 8 am) to avoid crowds.\n- 25-29 March: Tokyo. Apartment in Shibuya. TeamLab Planets booked for 27 March, 15:00.",
+      "seconds": 0.81,
       "error": null,
       "fails": [],
       "passed": true
@@ -105,7 +111,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.06,
+      "context": "[1] (source: samples/japan_trip_2027.md #2)\n[Japan Trip Plan (March 2027) > Budget]\n- Total budget: RM 12,000 for two people.\n- JR Pass is no longer worth it for this route; use ICOCA card and a one-way Shinkansen\n  ticket Kyoto to Tokyo (about JPY 14,000 each).",
+      "seconds": 0.87,
       "error": null,
       "fails": [],
       "passed": true
@@ -120,7 +127,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.94,
+      "context": "[1] (source: samples/japan_trip_2027.md #1)\n[Japan Trip Plan (March 2027) > Itinerary]\n- 19-22 March: Osaka. Stay at Hotel Cross Osaka in Namba. Day trip to Nara on 21 March.\n- 22-25 March: Kyoto. Ryokan near Gion. Visit Fushimi Inari early (before 8 am) to avoid crowds.\n- 25-29 March: Tokyo. Apartment in Shibuya. TeamLab Planets booked for 27 March, 15:00.",
+      "seconds": 0.71,
       "error": null,
       "fails": [],
       "passed": true
@@ -129,13 +137,14 @@
       "id": "rag-next-service",
       "category": "rag",
       "q": "When is my next car service due?",
-      "reply": "According to your car maintenance log for the Honda City 2021, the next service is due at 40,000 km or April 2027, whichever comes first [1].",
+      "reply": "According to your car maintenance log for the Honda City 2021, your next service is due at 40,000 km or April 2027, whichever comes first [1].",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.39,
+      "context": "[1] (source: samples/car_maintenance.md #1)\n[Car Maintenance Log - Honda City 2021 > Next service]\n- Next service due at 40,000 km or April 2027, whichever comes first.\n- Workshop: Honda service centre in Glenmarie, Shah Alam. Advisor: Encik Hafiz.",
+      "seconds": 1.16,
       "error": null,
       "fails": [],
       "passed": true
@@ -144,13 +153,14 @@
       "id": "rag-insurance-date",
       "category": "rag",
       "q": "When does my car insurance renew?",
-      "reply": "Your car insurance for the Honda City 2021 renews every 15 June with Etiqa [1].",
+      "reply": "Your car insurance for the Honda City 2021 renews every 15 June with Etiqa [1]. Since today is 2026-11-17, your insurance has already renewed for the current year.",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.02,
+      "context": "[1] (source: samples/car_maintenance.md #2)\n[Car Maintenance Log - Honda City 2021 > Insurance and road tax]\n- Insurance renews every 15 June with Etiqa. Road tax renews on the same date.\n- Tyres: Michelin Primacy 4, 185/55 R16, replaced in August 2026.",
+      "seconds": 1.19,
       "error": null,
       "fails": [],
       "passed": true
@@ -165,7 +175,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.26,
+      "context": "[1] (source: samples/car_maintenance.md #2)\n[Car Maintenance Log - Honda City 2021 > Insurance and road tax]\n- Insurance renews every 15 June with Etiqa. Road tax renews on the same date.\n- Tyres: Michelin Primacy 4, 185/55 R16, replaced in August 2026.",
+      "seconds": 1.09,
       "error": null,
       "fails": [],
       "passed": true
@@ -180,7 +191,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.2,
+      "context": "[1] (source: samples/car_maintenance.md #0)\n[Car Maintenance Log - Honda City 2021 > Service history]\n- 10,000 km (May 2025): oil change, oil filter. Cost RM 210.\n- 20,000 km (December 2025): oil change, brake fluid check, tyre rotation. Cost RM 380.\n- 30,000 km (August 2026): oil change, air filter, cabin filter, spark plugs. Cost RM 690.\n\n[2] (source: samples/car_maintenance.md #1)\n[Car Maintenance Log - Honda City 2021 > Next service]\n- Next service due at 40,000 km or April 2027, whichever comes first.\n- Workshop: Honda service centre in Glenmarie, Shah Alam. Advisor: Encik Hafiz.",
+      "seconds": 0.9,
       "error": null,
       "fails": [],
       "passed": true
@@ -195,7 +207,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.71,
+      "context": "",
+      "seconds": 0.58,
       "error": null,
       "fails": [],
       "passed": true
@@ -204,13 +217,14 @@
       "id": "refuse-passport",
       "category": "refusal",
       "q": "What is my passport number?",
-      "reply": "I couldn't find your passport number in the knowledge base.",
+      "reply": "I couldn't find your passport number in the provided knowledge base.",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.5,
+      "context": "",
+      "seconds": 0.51,
       "error": null,
       "fails": [],
       "passed": true
@@ -225,7 +239,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.86,
+      "context": "",
+      "seconds": 0.88,
       "error": null,
       "fails": [],
       "passed": true
@@ -240,7 +255,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.69,
+      "context": "",
+      "seconds": 0.64,
       "error": null,
       "fails": [],
       "passed": true
@@ -257,7 +273,8 @@
       "tools": [
         "calculator({\"expression\": \"0.18 * 2500\"})"
       ],
-      "seconds": 1.02,
+      "context": "",
+      "seconds": 1.11,
       "error": null,
       "fails": [],
       "passed": true
@@ -274,6 +291,7 @@
       "tools": [
         "calculator({\"expression\": \"17 * 23\"})"
       ],
+      "context": "",
       "seconds": 0.94,
       "error": null,
       "fails": [],
@@ -300,7 +318,8 @@
       "tools": [
         "add_task({\"title\": \"Renew my passport\", \"due\": \"2027-01-31\", \"priority\": \"high\"})"
       ],
-      "seconds": 1.39,
+      "context": "",
+      "seconds": 1.31,
       "error": null,
       "fails": [],
       "passed": true
@@ -309,7 +328,7 @@
       "id": "task-add-rejected",
       "category": "tasks",
       "q": "Add a task to call the workshop tomorrow.",
-      "reply": "The user rejected adding the task to call the workshop for tomorrow. No changes were made.",
+      "reply": "The user has rejected adding the task to call the workshop tomorrow. No changes have been made to the to-do list.",
       "agents": [
         "tasks"
       ],
@@ -326,7 +345,8 @@
       "tools": [
         "add_task({\"title\": \"Call the workshop\", \"due\": \"2026-11-18\", \"priority\": \"normal\"})"
       ],
-      "seconds": 1.05,
+      "context": "",
+      "seconds": 1.16,
       "error": null,
       "fails": [],
       "passed": true
@@ -343,7 +363,8 @@
       "tools": [
         "list_tasks({\"include_done\": false})"
       ],
-      "seconds": 0.91,
+      "context": "",
+      "seconds": 0.89,
       "error": null,
       "fails": [],
       "passed": true
@@ -366,9 +387,10 @@
         }
       ],
       "tools": [
-        "complete_task({\"task_id\": 3})"
+        "complete_task({\"task_id\": 1})"
       ],
-      "seconds": 0.71,
+      "context": "",
+      "seconds": 0.67,
       "error": null,
       "fails": [],
       "passed": true
@@ -383,9 +405,10 @@
       ],
       "approvals": [],
       "tools": [
-        "read_text_file({\"path\": \"/home/danial/work/jarvis-agent/sandbox/shopping_list.txt\", \"head\": 10})"
+        "read_text_file({\"head\": 10, \"path\": \"/home/danial/work/jarvis-agent/sandbox/shopping_list.txt\"})"
       ],
-      "seconds": 1.96,
+      "context": "",
+      "seconds": 1.81,
       "error": null,
       "fails": [],
       "passed": true
@@ -394,7 +417,7 @@
       "id": "research-meeting",
       "category": "research",
       "q": "When is the next residents' meeting, according to my meeting notes file?",
-      "reply": "According to the meeting notes, the next residents' meeting is scheduled for 8 December 2026 at 8:30 pm, at the surau hall.",
+      "reply": "According to the meeting notes in `meeting_notes.txt`, the next residents' meeting is scheduled for 8 December 2026 at 8:30 pm, at the surau hall.",
       "agents": [
         "research"
       ],
@@ -403,7 +426,8 @@
         "list_directory({\"path\": \"/home/danial/work/jarvis-agent/sandbox\"})",
         "read_text_file({\"path\": \"/home/danial/work/jarvis-agent/sandbox/meeting_notes.txt\", \"head\": 5})"
       ],
-      "seconds": 3.24,
+      "context": "",
+      "seconds": 3.33,
       "error": null,
       "fails": [],
       "passed": true
@@ -420,7 +444,8 @@
       "tools": [
         "fetch({\"url\": \"https://example.com\", \"max_length\": 100})"
       ],
-      "seconds": 1.76,
+      "context": "",
+      "seconds": 1.46,
       "error": null,
       "fails": [],
       "passed": true
@@ -447,7 +472,8 @@
         "read_text_file({\"path\": \"/home/danial/work/jarvis-agent/sandbox/shopping_list.txt\"})",
         "add_task({\"title\": \"Buy eggs\", \"priority\": \"normal\"})"
       ],
-      "seconds": 2.78,
+      "context": "",
+      "seconds": 2.26,
       "error": null,
       "fails": [],
       "passed": true
@@ -462,7 +488,8 @@
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.7,
+      "context": "",
+      "seconds": 0.67,
       "error": null,
       "fails": [],
       "passed": true
@@ -471,13 +498,14 @@
       "id": "conv-1-printer",
       "category": "multi-turn",
       "q": "What IP address does my printer use?",
-      "reply": "According to my notes, your printer (Brother HL-L2350DW) uses the IP address 192.168.0.20 [1].",
+      "reply": "The printer's IP address is 192.168.0.20 [1].",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.09,
+      "context": "[1] (source: samples/home_network.md #1)\n[Home Network Notes > Devices with fixed IPs]\n- NAS (Synology DS224+): 192.168.0.10, backups run every night at 02:00.\n- Printer (Brother HL-L2350DW): 192.168.0.20.\n- Home Assistant on a Raspberry Pi 5: 192.168.0.30, port 8123.",
+      "seconds": 0.74,
       "error": null,
       "fails": [],
       "passed": true
@@ -486,13 +514,14 @@
       "id": "conv-2-service",
       "category": "multi-turn",
       "q": "When is my next car service due?",
-      "reply": "[1] Your next car service for the Honda City 2021 is due at 40,000 km or April 2027, whichever comes first. The service centre is in Glenmarie, Shah Alam, and the advisor is Encik Hafiz.",
+      "reply": "[1] Your next car service for the Honda City 2021 is due at 40,000 km or April 2027, whichever comes first. The service will be conducted at the Honda service centre in Glenmarie, Shah Alam, with advisor Encik Hafiz.",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 1.48,
+      "context": "[1] (source: samples/car_maintenance.md #1)\n[Car Maintenance Log - Honda City 2021 > Next service]\n- Next service due at 40,000 km or April 2027, whichever comes first.\n- Workshop: Honda service centre in Glenmarie, Shah Alam. Advisor: Encik Hafiz.",
+      "seconds": 1.42,
       "error": null,
       "fails": [],
       "passed": true
@@ -501,13 +530,14 @@
       "id": "conv-3-birthday",
       "category": "multi-turn",
       "q": "What is my wife's birthday?",
-      "reply": "I couldn't find this information in my notes or documents.",
+      "reply": "I couldn't find this information in the provided passages.",
       "agents": [
         "assistant"
       ],
       "approvals": [],
       "tools": [],
-      "seconds": 0.68,
+      "context": "",
+      "seconds": 0.59,
       "error": null,
       "fails": [],
       "passed": true
@@ -516,7 +546,7 @@
       "id": "conv-4-shopping-task",
       "category": "multi-turn",
       "q": "Read my shopping list file, then add the dish soap from it as a task.",
-      "reply": "I've added \"Buy dish soap\" to your to-do list.",
+      "reply": "I have added \"Buy dish soap\" to your to-do list.",
       "agents": [
         "research",
         "tasks"
@@ -534,7 +564,8 @@
         "read_text_file({\"path\": \"/home/danial/work/jarvis-agent/sandbox/shopping_list.txt\"})",
         "add_task({\"title\": \"Buy dish soap\", \"priority\": \"normal\"})"
       ],
-      "seconds": 2.53,
+      "context": "",
+      "seconds": 2.65,
       "error": null,
       "fails": [],
       "passed": true
@@ -543,7 +574,7 @@
       "id": "conv-5-complete-rejected",
       "category": "multi-turn",
       "q": "Mark the dish soap task as done.",
-      "reply": "It seems you've decided not to mark the task as done. Is there anything else you need help with?",
+      "reply": "It seems you've decided not to mark the dish soap task as done. Is there anything else you need help with?",
       "agents": [
         "tasks"
       ],
@@ -557,9 +588,10 @@
         }
       ],
       "tools": [
-        "complete_task({\"task_id\": 1})"
+        "complete_task({\"task_id\": 3})"
       ],
-      "seconds": 0.97,
+      "context": "",
+      "seconds": 0.92,
       "error": null,
       "fails": [],
       "passed": true

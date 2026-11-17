@@ -11,6 +11,10 @@ Any MCP client can use it (Jarvis, Claude Desktop, Cursor, ...):
 
 Needs JARVIS_DATABASE_URL. Deleting is deliberately not offered: destructive actions get
 a human-approval step in the agent first (step 4).
+
+Multi-user: every tool takes an `owner` (default "local"). The server trusts its client, as a
+stdio MCP server spawned by that client should; Jarvis's gateway authenticates users and sets
+`owner` in code, hidden from the model, so a prompt can't reach another user's list.
 """
 import argparse
 import os
@@ -30,7 +34,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at timestamptz NOT NULL DEFAULT now(),
     done_at    timestamptz
 );
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS owner text NOT NULL DEFAULT 'local';
+CREATE INDEX IF NOT EXISTS tasks_owner_open ON tasks (owner) WHERE NOT done;
 """
+LOCAL = "local"
 
 mcp = FastMCP("jarvis-tasks", host="127.0.0.1", port=8765)
 
@@ -56,18 +63,18 @@ def _fmt(row) -> str:
     return " | ".join(parts)
 
 
-def _open_tasks() -> list[str]:
+def _open_tasks(owner: str = LOCAL) -> list[str]:
     with _conn() as c:
         rows = c.execute(
-            "SELECT id, title, due, priority, done FROM tasks WHERE NOT done "
-            "ORDER BY due NULLS LAST, CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, id"
-        ).fetchall()
+            "SELECT id, title, due, priority, done FROM tasks WHERE NOT done AND owner = %s "
+            "ORDER BY due NULLS LAST, CASE priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END, id",
+            (owner,)).fetchall()
     return [_fmt(r) for r in rows]
 
 
 @mcp.tool()
 def add_task(title: str, due: str | None = None,
-             priority: Literal["low", "normal", "high"] = "normal") -> str:
+             priority: Literal["low", "normal", "high"] = "normal", owner: str = LOCAL) -> str:
     """Add a task to the user's to-do list.
 
     Args:
@@ -84,30 +91,31 @@ def add_task(title: str, due: str | None = None,
         return f"error: due must be YYYY-MM-DD, got {due!r}"
     with _conn() as c:
         row = c.execute(
-            "INSERT INTO tasks (title, due, priority) VALUES (%s, %s, %s) "
-            "RETURNING id, title, due, priority, done", (title, due_date, priority)).fetchone()
+            "INSERT INTO tasks (title, due, priority, owner) VALUES (%s, %s, %s, %s) "
+            "RETURNING id, title, due, priority, done", (title, due_date, priority, owner)).fetchone()
     return f"added {_fmt(row)}"
 
 
 @mcp.tool()
-def list_tasks(include_done: bool = False) -> str:
+def list_tasks(include_done: bool = False, owner: str = LOCAL) -> str:
     """List the user's tasks, soonest due first. Set include_done to also show finished ones."""
     if not include_done:
-        rows = _open_tasks()
+        rows = _open_tasks(owner)
     else:
         with _conn() as c:
             rows = [_fmt(r) for r in c.execute(
-                "SELECT id, title, due, priority, done FROM tasks ORDER BY done, due NULLS LAST, id")]
+                "SELECT id, title, due, priority, done FROM tasks WHERE owner = %s "
+                "ORDER BY done, due NULLS LAST, id", (owner,))]
     return "\n".join(rows) if rows else "No tasks."
 
 
 @mcp.tool()
-def complete_task(task_id: int) -> str:
+def complete_task(task_id: int, owner: str = LOCAL) -> str:
     """Mark a task as done, by its number (e.g. 3 for #3). Call list_tasks first if unsure."""
     with _conn() as c:
         row = c.execute(
-            "UPDATE tasks SET done = true, done_at = now() WHERE id = %s AND NOT done "
-            "RETURNING id, title, due, priority, done", (task_id,)).fetchone()
+            "UPDATE tasks SET done = true, done_at = now() WHERE id = %s AND owner = %s AND NOT done "
+            "RETURNING id, title, due, priority, done", (task_id, owner)).fetchone()
     return f"completed {_fmt(row)}" if row else f"error: no open task #{task_id}"
 
 

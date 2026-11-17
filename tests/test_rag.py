@@ -123,3 +123,11 @@ def test_chunks_carry_heading_path():
         "[Home Notes > Printer]\n- IP 192.168.0.20",
         "[Home Notes > Router]\n- Admin page 192.168.0.1",
     ]
+
+
+def test_documents_are_per_owner(ingested):
+    assert ingest_path(SAMPLES, ingested, HashEmbedder(), owner="alice")["ingested"] == 3  # same files, own copy
+    r = Retriever(ingested, HashEmbedder(), rerank_model=None)
+    assert r.search("Synology NAS backups", owner="alice")
+    assert r.search("Synology NAS backups", owner="carol") == []          # nothing of anyone else's
+    assert ingest_path(SAMPLES, ingested, HashEmbedder())["skipped"] == 3  # local's copy untouched

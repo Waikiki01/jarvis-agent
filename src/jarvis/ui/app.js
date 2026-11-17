@@ -68,6 +68,15 @@
   orb.setMorph($("morphToggle").checked);
   $("morphToggle").onchange = (e) => { orb.setMorph(e.target.checked); store.set("jarvis.morph", e.target.checked ? "1" : "0"); };
 
+  // ---------- auth (only when the server has JARVIS_AUTH_ENABLED) ----------
+  let authOn = false;
+  const token = () => store.get("jarvis.token", "");
+  const authHeaders = () => (authOn && token() ? { Authorization: "Bearer " + token() } : {});
+  function askToken(again) {
+    const t = window.prompt((again ? "That token was not accepted.\n" : "") + "Jarvis access token:", "");
+    store.set("jarvis.token", (t || "").trim());
+  }
+
   // ---------- WebSocket ----------
   let ws, busy = false, current = null, actionDone = false, retry = 0;
 
@@ -80,9 +89,14 @@
 
   function connect() {
     ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
-    ws.onopen = () => { retry = 0; health(); };
-    ws.onclose = () => {
+    ws.onopen = () => {
+      retry = 0;
+      if (authOn) ws.send(JSON.stringify({ type: "auth", token: token() }));
+      health();
+    };
+    ws.onclose = (ev) => {
       $("health").textContent = "disconnected"; $("health").className = "pill bad";
+      if (ev.code === 4401) { askToken(true); return setTimeout(connect, 100); }
       setTimeout(connect, Math.min(8000, 500 * 2 ** retry++));
     };
     ws.onmessage = (ev) => handle(JSON.parse(ev.data));
@@ -90,6 +104,9 @@
 
   function handle(e) {
     switch (e.type) {
+      case "auth_ok":
+        $("health").title = "signed in as " + e.user;
+        break;
       case "route":
         e.agents.forEach((a) => chip("agent", "▸ " + a));
         break;
@@ -228,7 +245,7 @@
       if (blob.size < 1000) { setOrb("idle"); return; }   // a tap, not speech
       setOrb("thinking"); $("input").placeholder = "Transcribing…";
       try {
-        const r = await fetch("/transcribe", { method: "POST", headers: { "content-type": blob.type }, body: blob });
+        const r = await fetch("/transcribe", { method: "POST", headers: { "content-type": blob.type, ...authHeaders() }, body: blob });
         if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
         const { text } = await r.json();
         if (text.trim()) send(text); else setOrb("idle");
@@ -289,5 +306,9 @@
   }
 
   setOrb("idle");
-  connect();
+  (async () => {
+    try { authOn = !!(await (await fetch("/health")).json()).auth; } catch { /* offline: connect() retries */ }
+    if (authOn && !token()) askToken(false);
+    connect();
+  })();
 })();
