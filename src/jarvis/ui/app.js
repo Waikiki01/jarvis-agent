@@ -1,8 +1,9 @@
 /* Jarvis UI: WebSocket client for /ws, orb states, approval card, free browser voice.
  *
  * Server events: route | token | tool_call | tool_result | approval_required | done | error
- * Voice uses only built-in browser APIs (no keys, no cost):
- *   - speech-to-text: Web Speech API (Chrome/Edge; Chrome sends audio to its speech service)
+ * Voice, no keys and no cost:
+ *   - speech-to-text: offline Whisper on the server (/transcribe) when installed, else the
+ *     Web Speech API (Chrome/Edge; Chrome sends audio to its speech service)
  *   - text-to-speech: speechSynthesis (voices installed on this computer)
  */
 (function () {
@@ -177,33 +178,93 @@
   };
 
   // ---------- voice input (push-to-talk) ----------
+  // "whisper": record here, transcribe offline on the server (/transcribe) - nothing leaves the PC.
+  // "browser": Web Speech API fallback (Chrome/Edge; Chrome sends audio to its speech service).
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  let rec = null, recording = false;
-  if (!SR) { $("mic").disabled = true; $("mic").title = "Voice input needs Chrome or Edge"; }
+  const canRecord = !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder);
+  let sttMode = "browser", rec = null, recording = false;
+
+  function updateMic() {
+    const ok = sttMode === "whisper" ? canRecord : !!SR;
+    $("mic").disabled = !ok;
+    $("mic").title = !ok ? "Voice input is not supported in this browser"
+      : `Talk: click, or hold Space (empty input) · ${sttMode === "whisper" ? "offline Whisper" : "browser speech"}`;
+  }
+
   function startRec() {
-    if (!SR || recording || busy) return;
-    rec = new SR();
-    rec.lang = "en-US"; rec.interimResults = true; rec.maxAlternatives = 1;
+    if (recording || busy) return;
+    if (sttMode === "whisper" && canRecord) return startWhisper();
+    if (SR) return startBrowserSR();
+  }
+  function beginRec() {
+    recording = true; $("mic").classList.add("rec"); setOrb("listening");
+    speechSynthesis?.cancel();
+  }
+  function endRec() { recording = false; $("mic").classList.remove("rec"); orb.setLevel(0); }
+
+  async function startWhisper() {
+    beginRec();
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      endRec(); setOrb("error"); addMsg("err", "Microphone access was blocked."); return;
+    }
+    const chunks = [];
+    const mr = new MediaRecorder(stream);
+    // Level meter so the orb reacts to your voice.
+    const ctx = new AudioContext(), an = ctx.createAnalyser(), buf = new Uint8Array(256);
+    ctx.createMediaStreamSource(stream).connect(an);
+    const meter = setInterval(() => {
+      an.getByteTimeDomainData(buf);
+      let peak = 0; for (const v of buf) peak = Math.max(peak, Math.abs(v - 128));
+      orb.setLevel(Math.min(1, peak / 50));
+    }, 60);
+    mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    mr.onstop = async () => {
+      clearInterval(meter); ctx.close(); stream.getTracks().forEach((t) => t.stop());
+      endRec();
+      const blob = new Blob(chunks, { type: mr.mimeType || "audio/webm" });
+      if (blob.size < 1000) { setOrb("idle"); return; }   // a tap, not speech
+      setOrb("thinking"); $("input").placeholder = "Transcribing…";
+      try {
+        const r = await fetch("/transcribe", { method: "POST", headers: { "content-type": blob.type }, body: blob });
+        if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+        const { text } = await r.json();
+        if (text.trim()) send(text); else setOrb("idle");
+      } catch (err) {
+        addMsg("err", "Transcription failed: " + err.message); setOrb("error");
+      } finally { $("input").placeholder = PLACEHOLDER; }
+    };
+    rec = { stop: () => mr.state !== "inactive" && mr.stop() };
+    mr.start();
+  }
+
+  function startBrowserSR() {
+    const r = new SR();
+    r.lang = "en-US"; r.interimResults = true; r.maxAlternatives = 1;
     let finalText = "";
-    rec.onresult = (ev) => {
+    r.onresult = (ev) => {
       let interim = "";
-      for (const r of ev.results) (r.isFinal ? (finalText = r[0].transcript) : (interim += r[0].transcript));
+      for (const x of ev.results) (x.isFinal ? (finalText = x[0].transcript) : (interim += x[0].transcript));
       $("input").value = finalText || interim;
       orb.setLevel(0.5);
     };
-    rec.onend = () => {
-      recording = false; $("mic").classList.remove("rec"); orb.setLevel(0);
+    r.onend = () => {
+      endRec();
       const text = $("input").value;
       $("input").value = "";
       if (text.trim()) send(text); else setOrb("idle");
     };
-    rec.onerror = () => {};
-    recording = true; $("mic").classList.add("rec"); setOrb("listening");
-    speechSynthesis?.cancel();
-    rec.start();
+    r.onerror = () => {};
+    rec = r;
+    beginRec();
+    r.start();
   }
   const stopRec = () => { if (recording && rec) rec.stop(); };
   $("mic").onclick = () => (recording ? stopRec() : startRec());
+  const PLACEHOLDER = $("input").placeholder;
+  updateMic();
 
   // ---------- keyboard ----------
   document.addEventListener("keydown", (e) => {
@@ -222,6 +283,7 @@
     try {
       const h = await (await fetch("/health")).json();
       $("health").textContent = `${h.provider} · ${h.tools.length} tools · ${h.memory}`;
+      sttMode = h.stt || "browser"; updateMic();
       $("health").className = "pill ok";
     } catch { $("health").textContent = "offline"; $("health").className = "pill bad"; }
   }

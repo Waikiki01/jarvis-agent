@@ -9,12 +9,14 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from langgraph.types import Command
 from pydantic import BaseModel
 
+from . import stt
 from .agents import Router
 from .config import get_settings
 from .graph import current_turn, text_of
@@ -86,7 +88,23 @@ def create_app(model=None, router: Router | None = None) -> FastAPI:
     @app.get("/health")
     async def health():
         return {"ok": True, "provider": settings.llm_provider, "memory": app.state.memory,
-                "tools": app.state.tools, "approval_tools": settings.approval_tools}
+                "tools": app.state.tools, "approval_tools": settings.approval_tools,
+                "stt": "whisper" if stt.available() else "browser"}
+
+    @app.post("/transcribe")
+    async def transcribe(request: Request):
+        """Raw audio body (e.g. audio/webm from MediaRecorder) -> {"text": ...}, offline."""
+        if not stt.available():
+            raise HTTPException(501, "offline speech-to-text not installed (pip install -e '.[voice]')")
+        audio = await request.body()
+        if not audio:
+            raise HTTPException(400, "empty audio")
+        if len(audio) > stt.MAX_AUDIO_BYTES:
+            raise HTTPException(413, "audio too long")
+        try:
+            return {"text": await run_in_threadpool(stt.transcribe, audio)}
+        except Exception as e:  # undecodable audio etc.
+            raise HTTPException(422, f"could not transcribe: {e}") from e
 
     @app.get("/search")
     def search(q: str):

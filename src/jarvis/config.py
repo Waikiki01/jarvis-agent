@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     phoenix_endpoint: str = "http://localhost:6006/v1/traces"
     tracing_project: str = "jarvis"
 
+    # Offline speech-to-text (faster-whisper, needs pip install -e ".[voice]"). "" = off,
+    # the UI then uses the browser's speech recognition. Models: tiny.en, base.en, small.en, ...
+    stt_model: str = "base.en"
+    stt_device: str = "cpu"
+    stt_language: str = "en"
+
     # RAG
     embed_model: str = "nomic-embed-text"
     embed_dim: int = 768

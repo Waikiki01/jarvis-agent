@@ -184,8 +184,8 @@ citations, routing, which action was submitted for approval and with which argum
 retrieval **hit@5** and **MRR** measured on the retriever alone. Thresholds in the YAML make it
 a gate (exit code 1 on a miss). Report: [`evals/results/latest.md`](evals/results/latest.md).
 
-**Result (local `qwen2.5:7b-instruct`, free): 85% → 100%** on the 27 single-turn cases; **97% (31/32)**
-after adding 5 multi-turn cases (see UI section). Retrieval hit@5 100%, MRR 1.00, median latency
+**Result (local `qwen2.5:7b-instruct`, free): 85% → 100%** on the 27 single-turn cases; 97% (31/32)
+after adding 5 multi-turn cases (see UI section), then **100% (32/32)** once task resolution moved into code. Retrieval hit@5 100%, MRR 1.00, median latency
 ~1.1 s, identical on repeat runs. Every fix came from a failing case:
 
 | Failing case | Root cause | Fix |
@@ -196,8 +196,23 @@ after adding 5 multi-turn cases (see UI section). Retrieval hit@5 100%, MRR 1.00
 | `task-complete` | model **guessed** task #3 (passport was #1); approval showed only an id → user could approve the wrong task blind | precondition in code: `list_tasks` before `complete_task`; approval shows the task's title |
 | flaky results between runs | Ollama default temperature 0.8 | temperature 0 → identical scores on repeat runs |
 | `refuse-bank` | grader didn't accept "I don't have access…" | grader fixed (an eval bug, not a model bug) |
+| `conv-5` | deep in a conversation the 7B model, blocked for guessing a task number, replied to the user instead of retrying | **task resolution in code**: after the lookup, if exactly one open task matches the user's words, the call is pointed at it and goes to approval; ambiguous or no match → still blocked, the user picks |
 
 Baseline report kept in [`evals/results/baseline_2026-11-13.md`](evals/results/baseline_2026-11-13.md).
+
+### LLM-judge spot check (report only)
+
+```bash
+python evals/judge.py                        # judge = the local model from .env
+python evals/judge.py --provider anthropic   # or Claude as a stronger judge (paid)
+```
+
+For every knowledge-base answer, a judge LLM lists the answer's claims and marks each as supported
+or not by the passages Jarvis was given ([`evals/results/judge.md`](evals/results/judge.md)). It is
+**deliberately not the gate**: on two runs over the same answers the 7B judge flagged a different,
+correct claim each time (e.g. "Honda City 2021", which is in the note's title). Deterministic checks
+decide pass/fail; the judge is a second opinion that can catch an invented detail sitting next to
+the right number, and every flag gets a human look.
 
 ## Tracing
 
@@ -224,9 +239,11 @@ The LLM evals need Ollama and run locally (`python evals/run.py`).
   keys `Y` / `N`; orb turns gold and forms a "?"
 - orb states follow the backend: thinking, speaking, action complete (green ✓), error
 - the final bubble is the server's **verified** reply, which may replace streamed text
-- **free voice**: push-to-talk (hold Space) via the browser's Web Speech API, spoken replies via
-  `speechSynthesis`. No keys. Chrome sends speech audio to its own recognition service; for
-  fully offline speech, swap in faster-whisper later.
+- **free, offline voice**: push-to-talk (hold Space). With `pip install -e ".[voice]"` the browser
+  records the clip and `POST /transcribe` runs **faster-whisper** (`base.en`, int8, CPU) on this
+  machine: ~0.3 s per sentence, no audio leaves the PC. Without it, the UI falls back to the
+  browser's Web Speech API (Chrome sends that audio to Google). Spoken replies use `speechSynthesis`.
+  `/health` reports which one is active (`"stt": "whisper" | "browser"`).
 
 ### What the demo recording exposed
 
@@ -241,11 +258,6 @@ two-agent request was lost. Fixes, all in code:
 | Hand-off note was a question back to the user | Hand-off = the previous agent's **raw tool results** |
 | Next agent saw tools it doesn't have and faked success | Each agent sees only **its own** tool calls |
 | Evals only tested fresh conversations | New **multi-turn** cases replay the demo session |
-
-**Known limitation (left failing on purpose):** deep into a conversation, when blocked for guessing a
-task number, the 7B model doesn't retry with the correct number. The user gets a safe answer
-("I didn't change anything yet. Your open tasks are: ... Which one do you mean?"), but the eval
-expects an approval request, so `conv-5` stays red rather than loosening the test.
 
 ## Tests
 

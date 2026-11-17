@@ -13,6 +13,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest", "pytest-asyncio", "httpx", "ruff", "pyyaml"]
+voice = ["faster-whisper>=1.1"]  # offline speech-to-text for the UI
 tracing = ["arize-phoenix-otel==0.17.2", "openinference-instrumentation-langchain==0.1.81"]
 
 [build-system]
